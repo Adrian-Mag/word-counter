@@ -128,16 +128,20 @@ class SummaryCard(QFrame):
                 border: 1px solid {color}30;
                 border-radius: 10px;
             }}
+            QLabel {{
+                background: transparent;
+            }}
         """)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(6)
 
         title_label = QLabel(title)
-        title_label.setStyleSheet(f"color: {color}; font-size: 11px; font-weight: bold;")
+        title_label.setStyleSheet(f"color: {color}; font-size: 11px; font-weight: bold; background: transparent;")
         layout.addWidget(title_label)
 
         value_label = QLabel(value)
-        value_label.setStyleSheet(f"color: #2c3e50; font-size: 24px; font-weight: bold;")
+        value_label.setStyleSheet(f"color: #2c3e50; font-size: 22px; font-weight: bold; background: transparent;")
         layout.addWidget(value_label)
 
 
@@ -215,7 +219,7 @@ class ProjectPage(QWidget):
 
         # Title
         self.title_label = QLabel(f"✍️ {self.project_name}")
-        self.title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50;")
+        self.title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50; background: transparent;")
         layout.addWidget(self.title_label)
 
         # Input section
@@ -226,13 +230,16 @@ class ProjectPage(QWidget):
                 border: 1px solid #e0e0e0;
                 border-radius: 12px;
             }
+            QLabel {
+                background: transparent;
+            }
         """)
         input_layout = QVBoxLayout(input_frame)
         input_layout.setContentsMargins(20, 20, 20, 20)
         input_layout.setSpacing(10)
 
         input_label = QLabel("How many words did you write? (use negative for editing)")
-        input_label.setStyleSheet("font-size: 13px; color: #666;")
+        input_label.setStyleSheet("font-size: 13px; color: #666; background: transparent;")
         input_layout.addWidget(input_label)
 
         input_row = QHBoxLayout()
@@ -311,13 +318,13 @@ class ProjectPage(QWidget):
 
         # Last entry info
         self.last_entry_label = QLabel("")
-        self.last_entry_label.setStyleSheet("color: #999; font-size: 11px;")
+        self.last_entry_label.setStyleSheet("color: #999; font-size: 11px; background: transparent;")
         self.last_entry_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.last_entry_label)
 
         # Recent additions summary
         self.recent_label = QLabel("")
-        self.recent_label.setStyleSheet("color: #aaa; font-size: 10px;")
+        self.recent_label.setStyleSheet("color: #aaa; font-size: 10px; background: transparent;")
         self.recent_label.setAlignment(Qt.AlignCenter)
         self.recent_label.setWordWrap(True)
         layout.addWidget(self.recent_label)
@@ -364,7 +371,7 @@ class ProjectPage(QWidget):
 
         # Version label
         version_label = QLabel(f"v{get_current_version()}")
-        version_label.setStyleSheet("color: #ccc; font-size: 10px;")
+        version_label.setStyleSheet("color: #ccc; font-size: 10px; background: transparent;")
         version_label.setAlignment(Qt.AlignRight)
         layout.addWidget(version_label)
 

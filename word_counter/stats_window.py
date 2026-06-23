@@ -35,21 +35,25 @@ class StatsCard(QFrame):
                 border: 1px solid #e0e0e0;
                 border-radius: 10px;
             }
+            QLabel {
+                background: transparent;
+            }
         """)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(4)
 
         title_label = QLabel(title)
-        title_label.setStyleSheet("color: #666; font-size: 11px; font-weight: bold;")
+        title_label.setStyleSheet("color: #666; font-size: 11px; font-weight: bold; background: transparent;")
         layout.addWidget(title_label)
 
         value_label = QLabel(value)
-        value_label.setStyleSheet("color: #2c3e50; font-size: 22px; font-weight: bold;")
+        value_label.setStyleSheet("color: #2c3e50; font-size: 20px; font-weight: bold; background: transparent;")
         layout.addWidget(value_label)
 
         if subtitle:
             sub_label = QLabel(subtitle)
-            sub_label.setStyleSheet("color: #999; font-size: 10px;")
+            sub_label.setStyleSheet("color: #999; font-size: 10px; background: transparent;")
             layout.addWidget(sub_label)
 
 
@@ -98,12 +102,12 @@ class StatsPage(QWidget):
         # Header
         header_layout = QHBoxLayout()
         title = QLabel("📊 Writing Statistics")
-        title.setStyleSheet("font-size: 20px; font-weight: bold; color: #2c3e50;")
+        title.setStyleSheet("font-size: 20px; font-weight: bold; color: #2c3e50; background: transparent;")
         header_layout.addWidget(title)
         header_layout.addStretch()
 
         period_label = QLabel("Period:")
-        period_label.setStyleSheet("font-size: 12px; color: #666;")
+        period_label.setStyleSheet("font-size: 12px; color: #666; background: transparent;")
         header_layout.addWidget(period_label)
 
         self.period_combo = QComboBox()
@@ -133,7 +137,7 @@ class StatsPage(QWidget):
 
         # Recent entries list
         entries_label = QLabel("📝 Recent Entries")
-        entries_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #2c3e50; margin-top: 8px;")
+        entries_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #2c3e50; margin-top: 8px; background: transparent;")
         main_layout.addWidget(entries_label)
 
         self.entries_container = QWidget()
@@ -257,23 +261,23 @@ class StatsPage(QWidget):
             words_str = f"{sign}{entry['word_count']:,} words"
 
             date_label = QLabel(date_str)
-            date_label.setStyleSheet("color: #666; font-size: 11px;")
+            date_label.setStyleSheet("color: #666; font-size: 11px; background: transparent;")
             row_layout.addWidget(date_label)
             row_layout.addStretch()
 
             words_label = QLabel(words_str)
-            words_label.setStyleSheet("color: #5B9BD5; font-size: 12px; font-weight: bold;")
+            words_label.setStyleSheet("color: #5B9BD5; font-size: 12px; font-weight: bold; background: transparent;")
             row_layout.addWidget(words_label)
 
             if entry.get("note"):
                 note_label = QLabel(f"  ({entry['note']})")
-                note_label.setStyleSheet("color: #aaa; font-size: 10px; font-style: italic;")
+                note_label.setStyleSheet("color: #aaa; font-size: 10px; font-style: italic; background: transparent;")
                 row_layout.addWidget(note_label)
 
             self.entries_layout.addWidget(row)
 
         if not entries:
             no_entries = QLabel("No entries yet. Start writing! ✍️")
-            no_entries.setStyleSheet("color: #aaa; font-size: 12px; padding: 20px;")
+            no_entries.setStyleSheet("color: #aaa; font-size: 12px; padding: 20px; background: transparent;")
             no_entries.setAlignment(Qt.AlignCenter)
             self.entries_layout.addWidget(no_entries)

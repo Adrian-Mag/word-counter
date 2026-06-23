@@ -207,34 +207,38 @@ class ProjectCard(QFrame):
                 border-color: #5B9BD5;
                 background-color: #f0f4f8;
             }
+            QLabel {
+                background: transparent;
+            }
         """)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 18, 20, 18)
-        layout.setSpacing(8)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(10)
 
         # Project name
         name_label = QLabel(f"📖 {project['name']}")
-        name_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #2c3e50;")
+        name_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #2c3e50; background: transparent;")
         layout.addWidget(name_label)
 
         # Stats row
         stats_row = QHBoxLayout()
+        stats_row.setSpacing(12)
         total_written = project.get("total_written", 0)
         baseline = project.get("baseline_word_count", 0)
         total = baseline + total_written
         entry_count = project.get("entry_count", 0)
 
         written_label = QLabel(f"✍️ {total_written:,} written")
-        written_label.setStyleSheet("color: #27AE60; font-size: 12px; font-weight: bold;")
+        written_label.setStyleSheet("color: #27AE60; font-size: 12px; font-weight: bold; background: transparent;")
         stats_row.addWidget(written_label)
 
         total_label = QLabel(f"📊 {total:,} total")
-        total_label.setStyleSheet("color: #8E44AD; font-size: 12px;")
+        total_label.setStyleSheet("color: #8E44AD; font-size: 12px; background: transparent;")
         stats_row.addWidget(total_label)
 
         entries_label = QLabel(f"📝 {entry_count} entries")
-        entries_label.setStyleSheet("color: #999; font-size: 11px;")
+        entries_label.setStyleSheet("color: #999; font-size: 11px; background: transparent;")
         stats_row.addWidget(entries_label)
         stats_row.addStretch()
         layout.addLayout(stats_row)
@@ -247,7 +251,7 @@ class ProjectCard(QFrame):
             activity_label = QLabel(f"Last: {time_str}")
         else:
             activity_label = QLabel("No entries yet")
-        activity_label.setStyleSheet("color: #aaa; font-size: 10px;")
+        activity_label.setStyleSheet("color: #aaa; font-size: 10px; background: transparent;")
         layout.addWidget(activity_label)
 
     def mousePressEvent(self, event):
@@ -274,11 +278,11 @@ class HomePage(QWidget):
 
         # Title
         title = QLabel("✍️ Word Counter")
-        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50;")
+        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50; background: transparent;")
         layout.addWidget(title)
 
         subtitle = QLabel("Your writing projects")
-        subtitle.setStyleSheet("color: #999; font-size: 13px;")
+        subtitle.setStyleSheet("color: #999; font-size: 13px; background: transparent;")
         layout.addWidget(subtitle)
 
         # New project button
@@ -353,7 +357,7 @@ class HomePage(QWidget):
 
         # Version label
         version_label = QLabel(f"v{get_current_version()}")
-        version_label.setStyleSheet("color: #ccc; font-size: 10px;")
+        version_label.setStyleSheet("color: #ccc; font-size: 10px; background: transparent;")
         version_label.setAlignment(Qt.AlignRight)
         layout.addWidget(version_label)
 
@@ -373,7 +377,7 @@ class HomePage(QWidget):
 
         if not projects:
             empty_label = QLabel("No projects yet.\nClick '+ New Project' to get started! 🚀")
-            empty_label.setStyleSheet("color: #ccc; font-size: 16px; padding: 40px;")
+            empty_label.setStyleSheet("color: #ccc; font-size: 16px; padding: 40px; background: transparent;")
             empty_label.setAlignment(Qt.AlignCenter)
             self.projects_layout.insertWidget(0, empty_label)
             return

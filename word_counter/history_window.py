@@ -148,12 +148,12 @@ class HistoryPage(QWidget):
         # Header
         header_row = QHBoxLayout()
         title = QLabel("📋 Entry History")
-        title.setStyleSheet("font-size: 20px; font-weight: bold; color: #2c3e50;")
+        title.setStyleSheet("font-size: 20px; font-weight: bold; color: #2c3e50; background: transparent;")
         header_row.addWidget(title)
         header_row.addStretch()
 
         self.count_label = QLabel("")
-        self.count_label.setStyleSheet("color: #999; font-size: 12px;")
+        self.count_label.setStyleSheet("color: #999; font-size: 12px; background: transparent;")
         header_row.addWidget(self.count_label)
         layout.addLayout(header_row)
 
@@ -172,6 +172,7 @@ class HistoryPage(QWidget):
                 border-radius: 8px;
                 gridline-color: #f0f0f0;
                 alternate-background-color: #f8f9fa;
+                background-color: #ffffff;
             }
             QHeaderView::section {
                 background-color: #f0f4f8;
@@ -181,6 +182,9 @@ class HistoryPage(QWidget):
                 padding: 8px;
                 border: none;
                 border-bottom: 1px solid #e0e0e0;
+            }
+            QTableWidget::item {
+                padding: 6px 8px;
             }
         """)
         self.table.verticalHeader().setVisible(False)
@@ -248,8 +252,9 @@ class HistoryPage(QWidget):
 
             # Action buttons
             actions_widget = QWidget()
+            actions_widget.setStyleSheet("background: transparent;")
             actions_layout = QHBoxLayout(actions_widget)
-            actions_layout.setContentsMargins(4, 2, 4, 2)
+            actions_layout.setContentsMargins(4, 4, 4, 4)
             actions_layout.setSpacing(6)
 
             edit_btn = QPushButton("Edit")
