@@ -8,6 +8,7 @@ from datetime import datetime
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (
+    QDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -24,6 +25,98 @@ from .database import Database
 from .history_window import HistoryWindow
 from .stats_window import StatsWindow
 from .update_checker import check_for_update, download_update, install_update, get_current_version
+
+
+class EditProjectDialog(QDialog):
+    """Dialog for editing a project's name and baseline."""
+
+    def __init__(self, project: dict, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Edit Project")
+        self.setMinimumWidth(400)
+        self.setStyleSheet("background-color: #ffffff;")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(14)
+
+        title = QLabel("✏️ Edit Project")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #2c3e50;")
+        layout.addWidget(title)
+
+        layout.addWidget(QLabel("Project name:"))
+        self.name_input = QLineEdit(project["name"])
+        self.name_input.setStyleSheet("""
+            QLineEdit {
+                padding: 10px 14px;
+                border: 2px solid #ddd;
+                border-radius: 8px;
+                font-size: 14px;
+            }
+            QLineEdit:focus { border-color: #5B9BD5; }
+        """)
+        layout.addWidget(self.name_input)
+
+        layout.addWidget(QLabel("Baseline word count:"))
+        baseline_help = QLabel("This is your starting point. It won't affect stats like averages or streaks, but you'll see a 'total including baseline' alongside your written words.")
+        baseline_help.setStyleSheet("color: #999; font-size: 10px;")
+        baseline_help.setWordWrap(True)
+        layout.addWidget(baseline_help)
+
+        self.baseline_input = QLineEdit(str(project.get("baseline_word_count", 0)))
+        self.baseline_input.setStyleSheet("""
+            QLineEdit {
+                padding: 10px 14px;
+                border: 2px solid #ddd;
+                border-radius: 8px;
+                font-size: 14px;
+            }
+            QLineEdit:focus { border-color: #5B9BD5; }
+        """)
+        layout.addWidget(self.baseline_input)
+
+        btn_row = QHBoxLayout()
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setStyleSheet("""
+            QPushButton {
+                padding: 10px 20px; border: 1px solid #ccc;
+                border-radius: 8px; font-size: 13px;
+            }
+            QPushButton:hover { background-color: #f0f0f0; }
+        """)
+        cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(cancel_btn)
+
+        save_btn = QPushButton("Save Changes")
+        save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #5B9BD5; color: white;
+                border: none; border-radius: 8px;
+                padding: 10px 20px; font-size: 13px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #4A8AC5; }
+        """)
+        save_btn.clicked.connect(self._on_save)
+        btn_row.addWidget(save_btn)
+        layout.addLayout(btn_row)
+
+    def _on_save(self):
+        name = self.name_input.text().strip()
+        if not name:
+            QMessageBox.warning(self, "Missing Name", "Please enter a project name.")
+            return
+        try:
+            baseline = int(self.baseline_input.text().strip() or "0")
+            if baseline < 0:
+                QMessageBox.warning(self, "Invalid", "Baseline cannot be negative.")
+                return
+        except ValueError:
+            QMessageBox.warning(self, "Invalid", "Please enter a valid number for the baseline.")
+            return
+        self.accept()
+
+    def get_values(self) -> tuple[str, int]:
+        return self.name_input.text().strip(), int(self.baseline_input.text().strip() or "0")
 
 
 class SummaryCard(QFrame):
@@ -96,6 +189,33 @@ class ProjectWindow(QMainWindow):
         back_btn.clicked.connect(self._go_back)
         top_bar.addWidget(back_btn)
         top_bar.addStretch()
+
+        delete_btn = QPushButton("🗑 Delete Project")
+        delete_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ffffff;
+                color: #e74c3c;
+                border: 1px solid #e74c3c;
+                border-radius: 6px;
+                padding: 6px 14px;
+                font-size: 11px;
+            }
+            QPushButton:hover { background-color: #e74c3c10; }
+        """)
+        edit_btn = QPushButton("✏️ Edit Project")
+        edit_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ffffff;
+                color: #5B9BD5;
+                border: 1px solid #5B9BD5;
+                border-radius: 6px;
+                padding: 6px 14px;
+                font-size: 11px;
+            }
+            QPushButton:hover { background-color: #5B9BD510; }
+        """)
+        edit_btn.clicked.connect(self._on_edit_project)
+        top_bar.addWidget(edit_btn)
 
         delete_btn = QPushButton("🗑 Delete Project")
         delete_btn.setStyleSheet("""
@@ -340,6 +460,21 @@ class ProjectWindow(QMainWindow):
         if self.on_back:
             self.close()
             self.on_back()
+
+    def _on_edit_project(self):
+        project = self.db.get_project(self.project_id)
+        if not project:
+            return
+        dialog = EditProjectDialog(project, self)
+        if dialog.exec_() == QDialog.Accepted:
+            name, baseline = dialog.get_values()
+            self.db.update_project(self.project_id, name=name, baseline_word_count=baseline)
+            self.project_name = name
+            self.setWindowTitle(f"Word Counter ✍️ — {name}")
+            # Update the title label in the UI
+            title_label = self.centralWidget().layout().itemAt(1).widget()
+            title_label.setText(f"✍️ {name}")
+            self.refresh_summary()
 
     def _on_delete_project(self):
         entry_count = len(self.db.get_all_entries(self.project_id))
