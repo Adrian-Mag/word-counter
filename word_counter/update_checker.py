@@ -13,7 +13,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-CURRENT_VERSION = "1.0.5"
+CURRENT_VERSION = "1.0.6"
 GITHUB_API_URL = "https://api.github.com/repos/Adrian-Mag/word-counter/releases/latest"
 
 
@@ -30,16 +30,19 @@ def check_for_update() -> dict | None:
 
         latest_tag = data.get("tag_name", "").lstrip("v")
         if _compare_versions(latest_tag, CURRENT_VERSION) > 0:
-            # Find the .exe download URL
+            # Find the .exe download URL and size
             exe_url = None
+            exe_size = 0
             for asset in data.get("assets", []):
                 if asset["name"].endswith(".exe"):
                     exe_url = asset["browser_download_url"]
+                    exe_size = asset.get("size", 0)
                     break
             if exe_url:
                 return {
                     "version": latest_tag,
                     "url": exe_url,
+                    "size": exe_size,
                     "notes": data.get("body", ""),
                 }
     except Exception:
@@ -63,14 +66,21 @@ def _compare_versions(v1: str, v2: str) -> int:
     return 0
 
 
-def download_update(exe_url: str, progress_callback=None) -> Path:
-    """Download the new .exe to a temp file. Returns the path."""
+def download_update(exe_url: str, expected_size: int = 0, progress_callback=None) -> Path:
+    """Download the new .exe to a temp file. Returns the path.
+    Raises RuntimeError if the download is incomplete or file size doesn't match."""
     tmp_dir = Path(tempfile.gettempdir())
     tmp_exe = tmp_dir / "WordCounter_update.exe"
 
+    # If a previous download attempt left a partial file, remove it
+    if tmp_exe.exists():
+        tmp_exe.unlink()
+
     req = urllib.request.Request(exe_url, headers={"User-Agent": "WordCounter"})
-    with urllib.request.urlopen(req, timeout=60) as resp:
+    with urllib.request.urlopen(req, timeout=120) as resp:
         total = int(resp.headers.get("Content-Length", 0))
+        if expected_size > 0 and total > 0 and total != expected_size:
+            raise RuntimeError(f"Size mismatch: expected {expected_size}, got {total}")
         downloaded = 0
         chunk_size = 65536
 
@@ -84,6 +94,15 @@ def download_update(exe_url: str, progress_callback=None) -> Path:
                 if progress_callback and total > 0:
                     progress_callback(downloaded, total)
 
+    # Verify the downloaded file size
+    actual_size = tmp_exe.stat().st_size
+    if total > 0 and actual_size != total:
+        tmp_exe.unlink()
+        raise RuntimeError(f"Download incomplete: got {actual_size} bytes, expected {total}")
+    if expected_size > 0 and actual_size != expected_size:
+        tmp_exe.unlink()
+        raise RuntimeError(f"File size mismatch: got {actual_size}, expected {expected_size}")
+
     return tmp_exe
 
 
@@ -93,8 +112,9 @@ def install_update(new_exe_path: Path):
     Creates a batch script that:
     1. Waits for the current app to close
     2. Copies the new .exe over the old one
-    3. Relaunches the app
-    4. Deletes itself
+    3. Verifies the copy succeeded (file size matches)
+    4. Relaunches the app
+    5. Deletes itself
     """
     current_exe = Path(sys.executable).resolve()
 
@@ -104,19 +124,31 @@ def install_update(new_exe_path: Path):
             os.startfile(str(new_exe_path.parent))
         return
 
-    # Create updater batch script
+    new_size = new_exe_path.stat().st_size
+
+    # Create updater batch script with copy verification
     updater_script = f"""@echo off
+chcp 65001 >nul 2>nul
 :wait
 timeout /t 1 /nobreak >nul
 del "{current_exe}" 2>nul
 if exist "{current_exe}" goto wait
 copy /y "{new_exe_path}" "{current_exe}"
+if not exist "{current_exe}" goto wait
+:verify
+for %%A in ("{current_exe}") do set copied_size=%%~zA
+if not "%copied_size%"=="{new_size}" (
+    timeout /t 1 /nobreak >nul
+    copy /y "{new_exe_path}" "{current_exe}"
+    for %%A in ("{current_exe}") do set copied_size=%%~zA
+    if not "%copied_size%"=="{new_size}" goto verify
+)
 start "" "{current_exe}"
 del "%~f0"
 """
 
     updater_path = Path(tempfile.gettempdir()) / "wordcounter_updater.bat"
-    with open(updater_path, "w") as f:
+    with open(updater_path, "w", encoding="utf-8") as f:
         f.write(updater_script)
 
     # Launch the updater and exit

@@ -402,18 +402,24 @@ class MainWindow(QMainWindow):
             return
 
         # Download with progress bar
-        progress = QProgressDialog("Downloading update...", "Cancel", 0, 100, self)
+        expected_size = update_info.get("size", 0)
+        size_mb = f"({expected_size / 1024 / 1024:.1f} MB)" if expected_size else ""
+        progress = QProgressDialog(f"Downloading update {size_mb}...", "Cancel", 0, 100, self)
         progress.setWindowTitle("Updating WordCounter")
         progress.setWindowModality(Qt.WindowModal)
         progress.setMinimumDuration(0)
         progress.setValue(0)
+        progress.setMinimumWidth(350)
 
         def on_progress(downloaded, total):
             percent = int((downloaded / total) * 100)
             progress.setValue(percent)
+            mb_done = downloaded / 1024 / 1024
+            mb_total = total / 1024 / 1024
+            progress.setLabelText(f"Downloading... {mb_done:.1f} / {mb_total:.1f} MB ({percent}%)")
 
         try:
-            new_exe = download_update(update_info["url"], on_progress)
+            new_exe = download_update(update_info["url"], expected_size, on_progress)
             progress.close()
             QMessageBox.information(
                 self,
