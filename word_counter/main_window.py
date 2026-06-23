@@ -25,7 +25,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from .database import Database
+from .database import Database, load_settings, save_settings
 from .history_window import HistoryPage
 from .project_window import ProjectPage
 from .stats_window import StatsPage
@@ -302,9 +302,9 @@ class HomePage(QWidget):
         new_btn.clicked.connect(lambda: self.on_new_project() if self.on_new_project else None)
         layout.addWidget(new_btn)
 
-        # Export buttons row
-        export_row = QHBoxLayout()
-        export_row.setSpacing(8)
+        # Export / Import / Backup buttons row
+        tools_row = QHBoxLayout()
+        tools_row.setSpacing(8)
 
         export_json_btn = QPushButton("📥 Export JSON")
         export_json_btn.setStyleSheet("""
@@ -319,7 +319,7 @@ class HomePage(QWidget):
             QPushButton:hover { background-color: #f0f0f0; }
         """)
         export_json_btn.clicked.connect(self._on_export_json)
-        export_row.addWidget(export_json_btn)
+        tools_row.addWidget(export_json_btn)
 
         export_csv_btn = QPushButton("📥 Export CSV")
         export_csv_btn.setStyleSheet("""
@@ -334,10 +334,40 @@ class HomePage(QWidget):
             QPushButton:hover { background-color: #f0f0f0; }
         """)
         export_csv_btn.clicked.connect(self._on_export_csv)
-        export_row.addWidget(export_csv_btn)
+        tools_row.addWidget(export_csv_btn)
 
-        export_row.addStretch()
-        layout.addLayout(export_row)
+        import_btn = QPushButton("📤 Import JSON")
+        import_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ffffff;
+                color: #5B9BD5;
+                border: 1px solid #5B9BD5;
+                border-radius: 6px;
+                padding: 6px 14px;
+                font-size: 11px;
+            }
+            QPushButton:hover { background-color: #5B9BD510; }
+        """)
+        import_btn.clicked.connect(self._on_import_json)
+        tools_row.addWidget(import_btn)
+
+        backup_btn = QPushButton("📁 Backup Location")
+        backup_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ffffff;
+                color: #666;
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                padding: 6px 14px;
+                font-size: 11px;
+            }
+            QPushButton:hover { background-color: #f0f0f0; }
+        """)
+        backup_btn.clicked.connect(self._on_set_backup_location)
+        tools_row.addWidget(backup_btn)
+
+        tools_row.addStretch()
+        layout.addLayout(tools_row)
 
         # Projects container in a scroll area
         self.projects_container = QWidget()
@@ -411,6 +441,73 @@ class HomePage(QWidget):
             QMessageBox.information(self, "Export Successful", f"Data exported to:\n{path}")
         else:
             QMessageBox.warning(self, "Export Failed", "Could not export data. Please try again.")
+
+    def _on_import_json(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import from JSON", "", "JSON files (*.json)"
+        )
+        if not path:
+            return
+
+        # Ask user: merge or replace
+        reply = QMessageBox.question(
+            self,
+            "Import Mode",
+            "How would you like to import this data?\n\n"
+            "• Click 'Yes' to MERGE: adds new projects and entries, keeps existing data.\n"
+            "• Click 'No' to REPLACE: wipes all current data and restores from the file.\n\n"
+            "Merge is recommended for most users.",
+            QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+            QMessageBox.Yes,
+        )
+        if reply == QMessageBox.Cancel:
+            return
+
+        replace = (reply == QMessageBox.No)
+        if replace:
+            confirm = QMessageBox.warning(
+                self,
+                "⚠️ Confirm Replace",
+                "This will DELETE all your current data and replace it with the imported file.\n\n"
+                "This cannot be undone. Are you sure?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if confirm != QMessageBox.Yes:
+                return
+
+        success, msg = self.db.import_from_json(path, replace=replace)
+        if success:
+            QMessageBox.information(self, "Import Successful", msg)
+            self.refresh_projects()
+        else:
+            QMessageBox.warning(self, "Import Failed", msg)
+
+    def _on_set_backup_location(self):
+        settings = load_settings()
+        current = settings.get("custom_backup_dir", "")
+
+        path = QFileDialog.getExistingDirectory(
+            self,
+            "Choose Backup Folder",
+            current or "",
+        )
+        if not path:
+            return
+
+        settings["custom_backup_dir"] = path
+        save_settings(settings)
+
+        # Trigger an immediate backup to the new location
+        self.db._backup_to_json()
+
+        QMessageBox.information(
+            self,
+            "Backup Location Set",
+            f"Automatic backups will now also be saved to:\n{path}\n\n"
+            f"A backup has been created there now.\n"
+            f"This is great for cloud sync folders (Dropbox, Google Drive, etc.)!",
+        )
 
 
 class MainWindow(QMainWindow):

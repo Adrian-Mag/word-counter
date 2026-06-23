@@ -34,6 +34,35 @@ def get_backup_dir() -> Path:
     return backup_dir
 
 
+def get_settings_path() -> Path:
+    """Return the path to the settings JSON file."""
+    return get_app_data_dir() / "settings.json"
+
+
+def load_settings() -> dict:
+    """Load settings from the settings file. Returns empty dict if not found."""
+    try:
+        path = get_settings_path()
+        if path.exists():
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"Failed to load settings: {e}")
+    return {}
+
+
+def save_settings(settings: dict):
+    """Save settings to the settings file."""
+    try:
+        path = get_settings_path()
+        tmp = path.with_suffix(".json.tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(settings, f, indent=2, ensure_ascii=False)
+        os.replace(str(tmp), str(path))
+    except Exception as e:
+        logger.error(f"Failed to save settings: {e}")
+
+
 class Database:
     """SQLite database for writing entries with multi-project support."""
 
@@ -265,7 +294,11 @@ class Database:
     # ── Backup ────────────────────────────────────────────────
 
     def _backup_to_json(self):
-        """Export all data (projects + entries) to a JSON backup file."""
+        """Export all data (projects + entries) to JSON backup files.
+
+        Backs up to the default backup directory and, if a custom backup
+        location is configured in settings, also copies there.
+        """
         try:
             projects = self.get_all_projects()
             all_data = []
@@ -301,6 +334,16 @@ class Database:
             if len(backups) > 10:
                 for old in backups[:-10]:
                     old.unlink()
+
+            # Also copy to custom backup location if configured
+            settings = load_settings()
+            custom_dir = settings.get("custom_backup_dir")
+            if custom_dir:
+                custom_path = Path(custom_dir)
+                custom_path.mkdir(parents=True, exist_ok=True)
+                custom_latest = custom_path / "wordcounter_latest_backup.json"
+                with open(custom_latest, "w", encoding="utf-8") as f:
+                    json.dump(all_data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.error(f"Backup failed: {e}")
 
@@ -347,6 +390,91 @@ class Database:
         except Exception as e:
             logger.error(f"CSV export failed: {e}")
             return False
+
+    def import_from_json(self, file_path: str, replace: bool = False) -> tuple[bool, str]:
+        """Import data from a JSON file.
+
+        If replace=True, all existing data is wiped first.
+        If replace=False, imported projects are merged (matched by name).
+
+        Returns (success, message describing what happened).
+        """
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            if not isinstance(data, list):
+                return False, "Invalid file format: expected a list of projects."
+
+            if replace:
+                # Wipe all existing data
+                with self._connect() as conn:
+                    conn.execute("DELETE FROM entries")
+                    conn.execute("DELETE FROM projects")
+                    conn.commit()
+
+            existing_projects = {p["name"]: p["id"] for p in self.get_all_projects()}
+            projects_added = 0
+            projects_merged = 0
+            entries_added = 0
+
+            for proj_data in data:
+                name = proj_data.get("name", "Imported Project")
+                baseline = proj_data.get("baseline_word_count", 0)
+                created_at = proj_data.get("created_at", datetime.now().isoformat())
+                entries = proj_data.get("entries", [])
+
+                if name in existing_projects and not replace:
+                    # Merge: add entries to existing project
+                    project_id = existing_projects[name]
+                    projects_merged += 1
+                else:
+                    # Create new project
+                    with self._connect() as conn:
+                        cursor = conn.execute(
+                            "INSERT INTO projects (name, created_at, baseline_word_count) VALUES (?, ?, ?)",
+                            (name, created_at, baseline),
+                        )
+                        project_id = cursor.lastrowid
+                        conn.commit()
+                    existing_projects[name] = project_id
+                    projects_added += 1
+
+                # Import entries (skip duplicates by timestamp)
+                existing_entries = self.get_all_entries(project_id)
+                existing_timestamps = {e["timestamp"] for e in existing_entries}
+
+                for entry in entries:
+                    ts = entry.get("timestamp", "")
+                    wc = entry.get("word_count", 0)
+                    note = entry.get("note", "")
+                    if ts and ts not in existing_timestamps:
+                        with self._connect() as conn:
+                            conn.execute(
+                                "INSERT INTO entries (project_id, timestamp, word_count, note) VALUES (?, ?, ?, ?)",
+                                (project_id, ts, wc, note),
+                            )
+                            conn.commit()
+                        entries_added += 1
+                        existing_timestamps.add(ts)
+
+            self._backup_to_json()
+
+            parts = []
+            if projects_added:
+                parts.append(f"{projects_added} new project(s)")
+            if projects_merged:
+                parts.append(f"{projects_merged} project(s) merged")
+            parts.append(f"{entries_added} entries imported")
+            msg = ", ".join(parts)
+            if not entries_added and not projects_added:
+                msg = "No new data to import (everything already exists)."
+            return True, msg
+        except json.JSONDecodeError:
+            return False, "Invalid JSON file. Could not parse."
+        except Exception as e:
+            logger.error(f"JSON import failed: {e}")
+            return False, f"Import failed: {e}"
 
     # ── Stats (scoped to project) ─────────────────────────────
 
