@@ -13,7 +13,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-CURRENT_VERSION = "1.0.7"
+CURRENT_VERSION = "1.0.8"
 GITHUB_API_URL = "https://api.github.com/repos/Adrian-Mag/word-counter/releases/latest"
 
 
@@ -143,7 +143,9 @@ if not "%copied_size%"=="{new_size}" (
     for %%A in ("{current_exe}") do set copied_size=%%~zA
     if not "%copied_size%"=="{new_size}" goto verify
 )
+timeout /t 2 /nobreak >nul
 start "" "{current_exe}"
+timeout /t 1 /nobreak >nul
 del "%~f0"
 """
 
