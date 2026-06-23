@@ -1,13 +1,14 @@
 """
 Main window for WordCounter app.
-Provides word count entry and today's summary.
+Home screen showing all projects with create/delete functionality.
 """
 
 from datetime import datetime
 
-from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
-from PyQt5.QtGui import QFont, QIcon, QPixmap
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtWidgets import (
+    QDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -15,15 +16,14 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMessageBox,
-    QProgressDialog,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
 
 from .database import Database
-from .history_window import HistoryWindow
-from .stats_window import StatsWindow
+from .project_window import ProjectWindow
 from .update_checker import check_for_update, download_update, install_update, get_current_version
 
 
@@ -89,46 +89,181 @@ def create_app_icon() -> QIcon:
     return QIcon(pixmap)
 
 
-class SummaryCard(QFrame):
-    """A card showing a summary statistic."""
+class NewProjectDialog(QDialog):
+    """Dialog for creating a new project."""
 
-    def __init__(self, title: str, value: str, color: str = "#5B9BD5"):
-        super().__init__()
-        self.setFrameShape(QFrame.StyledPanel)
-        self.setStyleSheet(f"""
-            SummaryCard {{
-                background-color: {color}15;
-                border: 1px solid {color}30;
-                border-radius: 10px;
-            }}
-        """)
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("New Project")
+        self.setMinimumWidth(400)
+        self.setStyleSheet("background-color: #ffffff;")
+
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(14)
 
-        title_label = QLabel(title)
-        title_label.setStyleSheet(f"color: {color}; font-size: 11px; font-weight: bold;")
-        layout.addWidget(title_label)
+        title = QLabel("📝 Create New Project")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #2c3e50;")
+        layout.addWidget(title)
 
-        value_label = QLabel(value)
-        value_label.setStyleSheet(f"color: #2c3e50; font-size: 24px; font-weight: bold;")
-        layout.addWidget(value_label)
+        layout.addWidget(QLabel("Project name:"))
+        self.name_input = QLineEdit()
+        self.name_input.setPlaceholderText("e.g., My Novel, Thesis, Short Stories...")
+        self.name_input.setStyleSheet("""
+            QLineEdit {
+                padding: 10px 14px;
+                border: 2px solid #ddd;
+                border-radius: 8px;
+                font-size: 14px;
+            }
+            QLineEdit:focus { border-color: #5B9BD5; }
+        """)
+        layout.addWidget(self.name_input)
+
+        layout.addWidget(QLabel("Current word count (baseline):"))
+        baseline_help = QLabel("This is your starting point. It won't affect stats like averages or streaks, but you'll see a 'total including baseline' alongside your written words.")
+        baseline_help.setStyleSheet("color: #999; font-size: 10px;")
+        baseline_help.setWordWrap(True)
+        layout.addWidget(baseline_help)
+
+        self.baseline_input = QLineEdit()
+        self.baseline_input.setPlaceholderText("e.g., 25000 (or leave at 0)")
+        self.baseline_input.setText("0")
+        self.baseline_input.setStyleSheet("""
+            QLineEdit {
+                padding: 10px 14px;
+                border: 2px solid #ddd;
+                border-radius: 8px;
+                font-size: 14px;
+            }
+            QLineEdit:focus { border-color: #5B9BD5; }
+        """)
+        layout.addWidget(self.baseline_input)
+
+        btn_row = QHBoxLayout()
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setStyleSheet("""
+            QPushButton {
+                padding: 10px 20px; border: 1px solid #ccc;
+                border-radius: 8px; font-size: 13px;
+            }
+            QPushButton:hover { background-color: #f0f0f0; }
+        """)
+        cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(cancel_btn)
+
+        create_btn = QPushButton("Create Project")
+        create_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #5B9BD5; color: white;
+                border: none; border-radius: 8px;
+                padding: 10px 20px; font-size: 13px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #4A8AC5; }
+        """)
+        create_btn.clicked.connect(self._on_create)
+        btn_row.addWidget(create_btn)
+        layout.addLayout(btn_row)
+
+    def _on_create(self):
+        name = self.name_input.text().strip()
+        if not name:
+            QMessageBox.warning(self, "Missing Name", "Please enter a project name.")
+            return
+        try:
+            baseline = int(self.baseline_input.text().strip() or "0")
+            if baseline < 0:
+                QMessageBox.warning(self, "Invalid", "Baseline cannot be negative.")
+                return
+        except ValueError:
+            QMessageBox.warning(self, "Invalid", "Please enter a valid number for the baseline.")
+            return
+        self.accept()
+
+    def get_values(self) -> tuple[str, int]:
+        return self.name_input.text().strip(), int(self.baseline_input.text().strip() or "0")
+
+
+class ProjectCard(QFrame):
+    """A clickable card showing a project summary."""
+
+    def __init__(self, project: dict, on_click=None, parent=None):
+        super().__init__()
+        self.project = project
+        self.on_click = on_click
+        self.setCursor(Qt.PointingHandCursor)
+        self.setStyleSheet("""
+            ProjectCard {
+                background-color: #f8f9fa;
+                border: 2px solid #e0e0e0;
+                border-radius: 12px;
+            }
+            ProjectCard:hover {
+                border-color: #5B9BD5;
+                background-color: #f0f4f8;
+            }
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(8)
+
+        # Project name
+        name_label = QLabel(f"📖 {project['name']}")
+        name_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #2c3e50;")
+        layout.addWidget(name_label)
+
+        # Stats row
+        stats_row = QHBoxLayout()
+        total_written = project.get("total_written", 0)
+        baseline = project.get("baseline_word_count", 0)
+        total = baseline + total_written
+        entry_count = project.get("entry_count", 0)
+
+        written_label = QLabel(f"✍️ {total_written:,} written")
+        written_label.setStyleSheet("color: #27AE60; font-size: 12px; font-weight: bold;")
+        stats_row.addWidget(written_label)
+
+        total_label = QLabel(f"📊 {total:,} total")
+        total_label.setStyleSheet("color: #8E44AD; font-size: 12px;")
+        stats_row.addWidget(total_label)
+
+        entries_label = QLabel(f"📝 {entry_count} entries")
+        entries_label.setStyleSheet("color: #999; font-size: 11px;")
+        stats_row.addWidget(entries_label)
+        stats_row.addStretch()
+        layout.addLayout(stats_row)
+
+        # Last activity
+        last_entry = project.get("last_entry")
+        if last_entry:
+            ts = datetime.fromisoformat(last_entry)
+            time_str = ts.strftime("%b %d at %I:%M %p")
+            activity_label = QLabel(f"Last: {time_str}")
+        else:
+            activity_label = QLabel("No entries yet")
+        activity_label.setStyleSheet("color: #aaa; font-size: 10px;")
+        layout.addWidget(activity_label)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton and self.on_click:
+            self.on_click(self.project)
 
 
 class MainWindow(QMainWindow):
-    """Main application window."""
+    """Home screen showing all projects."""
 
     def __init__(self, db: Database):
         super().__init__()
         self.db = db
-        self.stats_window: StatsWindow | None = None
-        self.history_window: HistoryWindow | None = None
+        self.project_window: ProjectWindow | None = None
         self.setWindowTitle("Word Counter ✍️")
-        self.setMinimumSize(450, 520)
+        self.setMinimumSize(500, 600)
         self.setWindowIcon(create_app_icon())
         self.setStyleSheet("QMainWindow { background-color: #ffffff; }")
 
         self._build_ui()
-        self.refresh_summary()
+        self.refresh_projects()
         QTimer.singleShot(2000, self._check_for_updates)
 
     def _build_ui(self):
@@ -143,241 +278,87 @@ class MainWindow(QMainWindow):
         title.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50;")
         layout.addWidget(title)
 
-        # Input section
-        input_frame = QFrame()
-        input_frame.setStyleSheet("""
-            QFrame {
-                background-color: #f8f9fa;
-                border: 1px solid #e0e0e0;
-                border-radius: 12px;
-            }
-        """)
-        input_layout = QVBoxLayout(input_frame)
-        input_layout.setContentsMargins(20, 20, 20, 20)
-        input_layout.setSpacing(10)
+        subtitle = QLabel("Your writing projects")
+        subtitle.setStyleSheet("color: #999; font-size: 13px;")
+        layout.addWidget(subtitle)
 
-        input_label = QLabel("How many words did you write? (use negative for editing)")
-        input_label.setStyleSheet("font-size: 13px; color: #666;")
-        input_layout.addWidget(input_label)
-
-        input_row = QHBoxLayout()
-        self.word_input = QLineEdit()
-        self.word_input.setPlaceholderText("Enter word count (e.g. 500 or -100 for editing)...")
-        self.word_input.setStyleSheet("""
-            QLineEdit {
-                padding: 10px 14px;
-                border: 2px solid #ddd;
-                border-radius: 8px;
-                font-size: 16px;
-            }
-            QLineEdit:focus {
-                border-color: #5B9BD5;
-            }
-        """)
-        self.word_input.returnPressed.connect(self._on_add_entry)
-        input_row.addWidget(self.word_input, stretch=1)
-
-        add_btn = QPushButton("Log Words")
-        add_btn.setStyleSheet("""
+        # New project button
+        new_btn = QPushButton("+ New Project")
+        new_btn.setStyleSheet("""
             QPushButton {
                 background-color: #5B9BD5;
                 color: white;
                 border: none;
                 border-radius: 8px;
-                padding: 10px 20px;
+                padding: 12px 24px;
                 font-size: 14px;
                 font-weight: bold;
             }
-            QPushButton:hover {
-                background-color: #4A8AC5;
-            }
-            QPushButton:pressed {
-                background-color: #3A7AB5;
-            }
+            QPushButton:hover { background-color: #4A8AC5; }
         """)
-        add_btn.clicked.connect(self._on_add_entry)
-        input_row.addWidget(add_btn)
-        input_layout.addLayout(input_row)
+        new_btn.clicked.connect(self._on_new_project)
+        layout.addWidget(new_btn)
 
-        # Optional note
-        self.note_input = QLineEdit()
-        self.note_input.setPlaceholderText("Optional note (e.g., 'Chapter 3 draft')...")
-        self.note_input.setStyleSheet("""
-            QLineEdit {
-                padding: 8px 14px;
-                border: 1px solid #ddd;
-                border-radius: 6px;
-                font-size: 12px;
-                color: #888;
-            }
-            QLineEdit:focus {
-                border-color: #bbb;
-            }
+        # Projects container in a scroll area
+        self.projects_container = QWidget()
+        self.projects_layout = QVBoxLayout(self.projects_container)
+        self.projects_layout.setContentsMargins(0, 0, 0, 0)
+        self.projects_layout.setSpacing(10)
+        self.projects_layout.addStretch()
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(self.projects_container)
+        scroll.setStyleSheet("""
+            QScrollArea { border: none; }
+            QScrollBar:vertical { width: 8px; }
         """)
-        self.note_input.returnPressed.connect(self._on_add_entry)
-        input_layout.addWidget(self.note_input)
+        layout.addWidget(scroll, stretch=1)
 
-        layout.addWidget(input_frame)
-
-        # Summary cards
-        cards_layout = QGridLayout()
-        cards_layout.setSpacing(10)
-
-        self.today_card = SummaryCard("TODAY'S WORDS", "0", "#5B9BD5")
-        self.streak_card = SummaryCard("CURRENT STREAK", "0 days", "#E8743B")
-        self.alltime_card = SummaryCard("ALL-TIME TOTAL", "0", "#27AE60")
-        self.entries_card = SummaryCard("TOTAL ENTRIES", "0", "#8E44AD")
-
-        cards_layout.addWidget(self.today_card, 0, 0)
-        cards_layout.addWidget(self.streak_card, 0, 1)
-        cards_layout.addWidget(self.alltime_card, 1, 0)
-        cards_layout.addWidget(self.entries_card, 1, 1)
-        layout.addLayout(cards_layout)
-
-        # Last entry info
-        self.last_entry_label = QLabel("")
-        self.last_entry_label.setStyleSheet("color: #999; font-size: 11px;")
-        self.last_entry_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.last_entry_label)
-
-        # Recent additions summary
-        self.recent_label = QLabel("")
-        self.recent_label.setStyleSheet("color: #aaa; font-size: 10px;")
-        self.recent_label.setAlignment(Qt.AlignCenter)
-        self.recent_label.setWordWrap(True)
-        layout.addWidget(self.recent_label)
-
-        layout.addStretch()
-
-        # Stats button
-        stats_btn = QPushButton("📊 View Statistics")
-        stats_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #ffffff;
-                color: #5B9BD5;
-                border: 2px solid #5B9BD5;
-                border-radius: 8px;
-                padding: 10px 20px;
-                font-size: 14px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #5B9BD510;
-            }
-        """)
-        stats_btn.clicked.connect(self._open_stats)
-        layout.addWidget(stats_btn)
-
-        # History button
-        history_btn = QPushButton("📋 View History")
-        history_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #ffffff;
-                color: #8E44AD;
-                border: 2px solid #8E44AD;
-                border-radius: 8px;
-                padding: 10px 20px;
-                font-size: 14px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #8E44AD10;
-            }
-        """)
-        history_btn.clicked.connect(self._open_history)
-        layout.addWidget(history_btn)
-
-        # Version label in bottom margin
+        # Version label
         version_label = QLabel(f"v{get_current_version()}")
         version_label.setStyleSheet("color: #ccc; font-size: 10px;")
         version_label.setAlignment(Qt.AlignRight)
         layout.addWidget(version_label)
 
-    def _on_add_entry(self):
-        text = self.word_input.text().strip()
-        if not text:
+    def refresh_projects(self):
+        """Rebuild the project cards."""
+        # Clear existing cards (keep the stretch)
+        while self.projects_layout.count() > 1:
+            item = self.projects_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        projects = self.db.get_all_projects()
+
+        if not projects:
+            empty_label = QLabel("No projects yet.\nClick '+ New Project' to get started! 🚀")
+            empty_label.setStyleSheet("color: #ccc; font-size: 16px; padding: 40px;")
+            empty_label.setAlignment(Qt.AlignCenter)
+            self.projects_layout.insertWidget(0, empty_label)
             return
-        try:
-            word_count = int(text)
-            if word_count == 0:
-                QMessageBox.warning(self, "Invalid Input", "Please enter a non-zero number.")
-                return
-        except ValueError:
-            QMessageBox.warning(self, "Invalid Input", "Please enter a valid number.")
-            return
 
-        note = self.note_input.text().strip()
-        self.db.add_entry(word_count, note)
-        self.word_input.clear()
-        self.note_input.clear()
-        self.word_input.setFocus()
-        self.refresh_summary()
+        for project in projects:
+            card = ProjectCard(project, on_click=self._open_project)
+            self.projects_layout.insertWidget(self.projects_layout.count() - 1, card)
 
-        # Brief confirmation with sign-aware formatting
-        if word_count > 0:
-            self.last_entry_label.setText(f"✅ Logged +{word_count:,} words!")
-        else:
-            self.last_entry_label.setText(f"✏️ Logged {word_count:,} words (editing)")
-        QTimer.singleShot(3000, lambda: self.refresh_summary())
+    def _on_new_project(self):
+        dialog = NewProjectDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            name, baseline = dialog.get_values()
+            self.db.create_project(name, baseline)
+            self.refresh_projects()
 
-    def refresh_summary(self):
-        """Refresh the summary cards and last entry info."""
-        today_entries = self.db.get_today_entries()
-        today_total = sum(e["word_count"] for e in today_entries)
+    def _open_project(self, project: dict):
+        self.hide()
+        self.project_window = ProjectWindow(self.db, project["id"], on_back=self._on_project_back)
+        self.project_window.show()
 
-        all_entries = self.db.get_all_entries()
-        all_time = sum(e["word_count"] for e in all_entries)
-
-        stats = self.db.get_stats(7)
-        streak = stats["current_streak"]
-
-        # Update cards
-        self.today_card.layout().itemAt(1).widget().setText(f"{today_total:,}")
-        self.streak_card.layout().itemAt(1).widget().setText(f"{streak} days")
-        self.alltime_card.layout().itemAt(1).widget().setText(f"{all_time:,}")
-        self.entries_card.layout().itemAt(1).widget().setText(f"{len(all_entries)}")
-
-        # Last entry info
-        if all_entries:
-            last = all_entries[-1]
-            ts = datetime.fromisoformat(last["timestamp"])
-            time_str = ts.strftime("%I:%M %p on %b %d")
-            sign = "+" if last["word_count"] >= 0 else ""
-            self.last_entry_label.setText(f"Last entry: {sign}{last['word_count']:,} words at {time_str}")
-        else:
-            self.last_entry_label.setText("No entries yet — start writing! 🚀")
-
-        # Recent additions summary (last 3 entries)
-        if len(all_entries) >= 1:
-            recent = all_entries[-3:]
-            parts = []
-            for e in recent:
-                ts = datetime.fromisoformat(e["timestamp"])
-                time_str = ts.strftime("%I:%M %p")
-                sign = "+" if e["word_count"] >= 0 else ""
-                note_str = f" ({e['note']})" if e.get("note") else ""
-                parts.append(f"{sign}{e['word_count']:,} at {time_str}{note_str}")
-            self.recent_label.setText("Recent: " + "  |  ".join(parts))
-        else:
-            self.recent_label.setText("")
-
-    def _open_stats(self):
-        if self.stats_window is None or not self.stats_window.isVisible():
-            self.stats_window = StatsWindow(self.db)
-            self.stats_window.show()
-            self.stats_window.activateWindow()
-        else:
-            self.stats_window.refresh()
-            self.stats_window.activateWindow()
-
-    def _open_history(self):
-        if self.history_window is None or not self.history_window.isVisible():
-            self.history_window = HistoryWindow(self.db, on_data_changed=self.refresh_summary)
-            self.history_window.show()
-            self.history_window.activateWindow()
-        else:
-            self.history_window.refresh()
-            self.history_window.activateWindow()
+    def _on_project_back(self):
+        self.project_window = None
+        self.refresh_projects()
+        self.show()
+        self.activateWindow()
 
     def _check_for_updates(self):
         """Check GitHub for a newer release (runs silently 2s after startup)."""
@@ -401,7 +382,7 @@ class MainWindow(QMainWindow):
         if reply != QMessageBox.Yes:
             return
 
-        # Download with progress bar
+        from PyQt5.QtWidgets import QProgressDialog
         expected_size = update_info.get("size", 0)
         size_mb = f"({expected_size / 1024 / 1024:.1f} MB)" if expected_size else ""
         progress = QProgressDialog(f"Downloading update {size_mb}...", "Cancel", 0, 100, self)
@@ -440,9 +421,7 @@ class MainWindow(QMainWindow):
             )
 
     def closeEvent(self, event):
-        """Close child windows when main window closes."""
-        if self.stats_window:
-            self.stats_window.close()
-        if self.history_window:
-            self.history_window.close()
+        """Close project window when home closes."""
+        if self.project_window:
+            self.project_window.close()
         event.accept()

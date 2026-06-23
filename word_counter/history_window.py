@@ -111,11 +111,14 @@ class EditEntryDialog(QDialog):
 class HistoryWindow(QWidget):
     """Window showing all entries with edit/delete/clear-all functionality."""
 
-    def __init__(self, db: Database, on_data_changed=None):
+    def __init__(self, db: Database, project_id: int, on_data_changed=None):
         super().__init__()
         self.db = db
+        self.project_id = project_id
         self.on_data_changed = on_data_changed
-        self.setWindowTitle("Entry History")
+        project = db.get_project(project_id)
+        project_name = project["name"] if project else "Project"
+        self.setWindowTitle(f"Entry History — {project_name}")
         self.setMinimumSize(600, 500)
         self.setStyleSheet("background-color: #ffffff;")
 
@@ -196,7 +199,7 @@ class HistoryWindow(QWidget):
 
     def refresh(self):
         """Rebuild the table from the database."""
-        entries = self.db.get_all_entries()
+        entries = self.db.get_all_entries(self.project_id)
         entries = list(reversed(entries))  # most recent first
 
         self.count_label.setText(f"{len(entries)} entries")
@@ -282,7 +285,7 @@ class HistoryWindow(QWidget):
 
     def _on_clear_all(self):
         # First confirmation
-        total = len(self.db.get_all_entries())
+        total = len(self.db.get_all_entries(self.project_id))
         if total == 0:
             QMessageBox.information(self, "Nothing to Clear", "There are no entries to delete.")
             return
@@ -311,7 +314,7 @@ class HistoryWindow(QWidget):
         if reply2 != QMessageBox.Yes:
             return
 
-        self.db.clear_all()
+        self.db.clear_all(self.project_id)
         self.refresh()
         self._notify_data_changed()
         QMessageBox.information(self, "Cleared", "All entries have been deleted.\nA backup was saved before clearing.")

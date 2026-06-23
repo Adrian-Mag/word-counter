@@ -60,10 +60,13 @@ class StatsWindow(QWidget):
         ("Past 6 Months", 180),
     ]
 
-    def __init__(self, db: Database):
+    def __init__(self, db: Database, project_id: int):
         super().__init__()
         self.db = db
-        self.setWindowTitle("Writing Stats")
+        self.project_id = project_id
+        project = db.get_project(project_id)
+        project_name = project["name"] if project else "Project"
+        self.setWindowTitle(f"Writing Stats — {project_name}")
         self.setMinimumSize(700, 600)
         self.setStyleSheet("background-color: #ffffff;")
 
@@ -134,7 +137,7 @@ class StatsWindow(QWidget):
     def refresh(self):
         """Refresh all stats and charts."""
         days = self.period_combo.currentData()
-        stats = self.db.get_stats(days)
+        stats = self.db.get_stats(self.project_id, days)
 
         # Clear old cards
         while self.cards_layout.count():
@@ -153,7 +156,8 @@ class StatsWindow(QWidget):
             StatsCard("AVG / DAY", avg_str, f"Over {days} days"),
             StatsCard("BEST DAY", best_str, best_sub),
             StatsCard("STREAK", f"{stats['current_streak']} days", "Consecutive days"),
-            StatsCard("ALL-TIME TOTAL", f"{stats['total_words_all_time']:,}", f"{stats['total_entries']} entries"),
+            StatsCard("WORDS WRITTEN", f"{stats['total_written']:,}", f"{stats['total_entries']} entries"),
+            StatsCard("TOTAL (INCL. BASELINE)", f"{stats['total_with_baseline']:,}", f"Baseline: {stats['baseline']:,}"),
         ]
         for card in cards:
             self.cards_layout.addWidget(card)
@@ -215,7 +219,7 @@ class StatsWindow(QWidget):
             if item.widget():
                 item.widget().deleteLater()
 
-        entries = self.db.get_all_entries()
+        entries = self.db.get_all_entries(self.project_id)
         # Show last 20 entries, most recent first
         for entry in reversed(entries[-20:]):
             ts = datetime.fromisoformat(entry["timestamp"])

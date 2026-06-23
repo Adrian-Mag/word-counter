@@ -1,6 +1,7 @@
 """
 Data layer for WordCounter app.
 Handles SQLite storage and JSON backups.
+Supports multiple projects with per-project entries and baselines.
 """
 
 import json
@@ -29,7 +30,7 @@ def get_backup_dir() -> Path:
 
 
 class Database:
-    """SQLite database for writing entries."""
+    """SQLite database for writing entries with multi-project support."""
 
     def __init__(self, db_path: Path | None = None):
         if db_path is None:
@@ -39,53 +40,143 @@ class Database:
 
     def _init_db(self):
         with sqlite3.connect(self.db_path) as conn:
+            # Create projects table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS projects (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    baseline_word_count INTEGER NOT NULL DEFAULT 0
+                )
+            """)
+
+            # Create entries table (with project_id)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS entries (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id INTEGER NOT NULL,
                     timestamp TEXT NOT NULL,
                     word_count INTEGER NOT NULL,
-                    note TEXT
+                    note TEXT,
+                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
                 )
             """)
+
+            # Migration: if entries table exists without project_id, add it
+            columns = [row[1] for row in conn.execute("PRAGMA table_info(entries)").fetchall()]
+            if "project_id" not in columns:
+                # Create a default project for existing entries
+                cursor = conn.execute(
+                    "INSERT INTO projects (name, created_at, baseline_word_count) VALUES (?, ?, ?)",
+                    ("My Writing Project", datetime.now().isoformat(), 0),
+                )
+                default_project_id = cursor.lastrowid
+                conn.execute(f"ALTER TABLE entries ADD COLUMN project_id INTEGER DEFAULT {default_project_id}")
+                conn.execute("UPDATE entries SET project_id = ?", (default_project_id,))
+
             conn.commit()
 
-    def add_entry(self, word_count: int, note: str = "") -> dict:
-        """Add a new entry and return it as a dict. Also triggers JSON backup."""
+    # ── Project CRUD ──────────────────────────────────────────
+
+    def create_project(self, name: str, baseline_word_count: int = 0) -> dict:
+        """Create a new project and return it as a dict."""
+        created_at = datetime.now().isoformat()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "INSERT INTO projects (name, created_at, baseline_word_count) VALUES (?, ?, ?)",
+                (name, created_at, baseline_word_count),
+            )
+            project_id = cursor.lastrowid
+            conn.commit()
+        self._backup_to_json()
+        return {"id": project_id, "name": name, "created_at": created_at, "baseline_word_count": baseline_word_count}
+
+    def get_all_projects(self) -> list[dict]:
+        """Return all projects ordered by most recently active."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("""
+                SELECT p.id, p.name, p.created_at, p.baseline_word_count,
+                       (SELECT MAX(timestamp) FROM entries WHERE project_id = p.id) as last_entry,
+                       (SELECT COALESCE(SUM(word_count), 0) FROM entries WHERE project_id = p.id) as total_written,
+                       (SELECT COUNT(*) FROM entries WHERE project_id = p.id) as entry_count
+                FROM projects p
+                ORDER BY last_entry DESC, p.created_at DESC
+            """).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_project(self, project_id: int) -> dict | None:
+        """Return a single project by ID."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT id, name, created_at, baseline_word_count FROM projects WHERE id = ?",
+                (project_id,),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def delete_project(self, project_id: int):
+        """Delete a project and all its entries."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("DELETE FROM entries WHERE project_id = ?", (project_id,))
+            conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+            conn.commit()
+        self._backup_to_json()
+
+    def update_project(self, project_id: int, name: str = None, baseline_word_count: int = None):
+        """Update a project's name and/or baseline."""
+        with sqlite3.connect(self.db_path) as conn:
+            if name is not None:
+                conn.execute("UPDATE projects SET name = ? WHERE id = ?", (name, project_id))
+            if baseline_word_count is not None:
+                conn.execute(
+                    "UPDATE projects SET baseline_word_count = ? WHERE id = ?",
+                    (baseline_word_count, project_id),
+                )
+            conn.commit()
+        self._backup_to_json()
+
+    # ── Entry CRUD (scoped to project) ────────────────────────
+
+    def add_entry(self, project_id: int, word_count: int, note: str = "") -> dict:
+        """Add a new entry to a project and return it as a dict."""
         timestamp = datetime.now().isoformat()
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
-                "INSERT INTO entries (timestamp, word_count, note) VALUES (?, ?, ?)",
-                (timestamp, word_count, note),
+                "INSERT INTO entries (project_id, timestamp, word_count, note) VALUES (?, ?, ?, ?)",
+                (project_id, timestamp, word_count, note),
             )
             entry_id = cursor.lastrowid
             conn.commit()
-        entry = {"id": entry_id, "timestamp": timestamp, "word_count": word_count, "note": note}
+        entry = {"id": entry_id, "project_id": project_id, "timestamp": timestamp, "word_count": word_count, "note": note}
         self._backup_to_json()
         return entry
 
-    def get_all_entries(self) -> list[dict]:
-        """Return all entries ordered by timestamp ascending."""
+    def get_all_entries(self, project_id: int) -> list[dict]:
+        """Return all entries for a project ordered by timestamp ascending."""
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
-                "SELECT id, timestamp, word_count, note FROM entries ORDER BY timestamp ASC"
+                "SELECT id, timestamp, word_count, note FROM entries WHERE project_id = ? ORDER BY timestamp ASC",
+                (project_id,),
             ).fetchall()
         return [dict(r) for r in rows]
 
-    def get_entries_since(self, since: datetime) -> list[dict]:
-        """Return entries since the given datetime, ordered ascending."""
+    def get_entries_since(self, project_id: int, since: datetime) -> list[dict]:
+        """Return entries for a project since the given datetime, ordered ascending."""
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
-                "SELECT id, timestamp, word_count, note FROM entries WHERE timestamp >= ? ORDER BY timestamp ASC",
-                (since.isoformat(),),
+                "SELECT id, timestamp, word_count, note FROM entries WHERE project_id = ? AND timestamp >= ? ORDER BY timestamp ASC",
+                (project_id, since.isoformat()),
             ).fetchall()
         return [dict(r) for r in rows]
 
-    def get_today_entries(self) -> list[dict]:
-        """Return today's entries."""
+    def get_today_entries(self, project_id: int) -> list[dict]:
+        """Return today's entries for a project."""
         today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        return self.get_entries_since(today_start)
+        return self.get_entries_since(project_id, today_start)
 
     def delete_entry(self, entry_id: int):
         """Delete an entry by ID."""
@@ -104,49 +195,36 @@ class Database:
             conn.commit()
         self._backup_to_json()
 
-    def clear_all(self):
-        """Delete all entries from the database."""
+    def clear_all(self, project_id: int):
+        """Delete all entries for a project (keeps the project itself)."""
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("DELETE FROM entries")
+            conn.execute("DELETE FROM entries WHERE project_id = ?", (project_id,))
             conn.commit()
         self._backup_to_json()
 
+    # ── Backup ────────────────────────────────────────────────
+
     def _backup_to_json(self):
-        """Export all entries to a JSON backup file."""
-        entries = self.get_all_entries()
+        """Export all data to a JSON backup file."""
+        projects = self.get_all_projects()
         backup_dir = get_backup_dir()
-        # Keep a rolling backup: latest.json + timestamped backups (keep last 10)
         latest_path = backup_dir / "latest_backup.json"
         with open(latest_path, "w", encoding="utf-8") as f:
-            json.dump(entries, f, indent=2, ensure_ascii=False)
+            json.dump(projects, f, indent=2, ensure_ascii=False)
 
         timestamped_path = backup_dir / f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         with open(timestamped_path, "w", encoding="utf-8") as f:
-            json.dump(entries, f, indent=2, ensure_ascii=False)
+            json.dump(projects, f, indent=2, ensure_ascii=False)
 
-        # Clean up old timestamped backups (keep last 10)
         backups = sorted(backup_dir.glob("backup_*.json"))
         if len(backups) > 10:
             for old in backups[:-10]:
                 old.unlink()
 
-    def restore_from_json(self, json_path: Path) -> int:
-        """Restore entries from a JSON backup file. Returns count of restored entries."""
-        with open(json_path, "r", encoding="utf-8") as f:
-            entries = json.load(f)
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("DELETE FROM entries")
-            for entry in entries:
-                conn.execute(
-                    "INSERT INTO entries (id, timestamp, word_count, note) VALUES (?, ?, ?, ?)",
-                    (entry["id"], entry["timestamp"], entry["word_count"], entry.get("note", "")),
-                )
-            conn.commit()
-        return len(entries)
+    # ── Stats (scoped to project) ─────────────────────────────
 
-    def get_daily_totals(self, days: int = 7) -> list[dict]:
-        """Return daily word totals for the past N days (including today).
-        Each dict has 'date' (YYYY-MM-DD) and 'total' (int)."""
+    def get_daily_totals(self, project_id: int, days: int = 7) -> list[dict]:
+        """Return daily word totals for the past N days for a project."""
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         result = []
         for i in range(days - 1, -1, -1):
@@ -154,20 +232,23 @@ class Database:
             day_end = day + timedelta(days=1)
             with sqlite3.connect(self.db_path) as conn:
                 row = conn.execute(
-                    "SELECT COALESCE(SUM(word_count), 0) FROM entries WHERE timestamp >= ? AND timestamp < ?",
-                    (day.isoformat(), day_end.isoformat()),
+                    "SELECT COALESCE(SUM(word_count), 0) FROM entries WHERE project_id = ? AND timestamp >= ? AND timestamp < ?",
+                    (project_id, day.isoformat(), day_end.isoformat()),
                 ).fetchone()
             result.append({"date": day.strftime("%Y-%m-%d"), "total": row[0]})
         return result
 
-    def get_stats(self, days: int = 7) -> dict:
-        """Return summary statistics for the past N days."""
-        daily = self.get_daily_totals(days)
+    def get_stats(self, project_id: int, days: int = 7) -> dict:
+        """Return summary statistics for the past N days for a project."""
+        daily = self.get_daily_totals(project_id, days)
         totals = [d["total"] for d in daily]
-        all_entries = self.get_all_entries()
-        total_words = sum(e["word_count"] for e in all_entries)
+        all_entries = self.get_all_entries(project_id)
+        total_written = sum(e["word_count"] for e in all_entries)
 
-        # Compute streak (consecutive days with > 0 words, ending today or yesterday)
+        project = self.get_project(project_id)
+        baseline = project["baseline_word_count"] if project else 0
+        total_with_baseline = baseline + total_written
+
         streak = 0
         for d in reversed(daily):
             if d["total"] > 0:
@@ -175,7 +256,6 @@ class Database:
             else:
                 break
 
-        # Best day in this period
         best_day = max(daily, key=lambda x: x["total"]) if daily else None
 
         return {
@@ -184,7 +264,9 @@ class Database:
             "avg_per_day": sum(totals) / days if days > 0 else 0,
             "best_day": best_day,
             "current_streak": streak,
-            "total_words_all_time": total_words,
+            "total_written": total_written,
+            "total_with_baseline": total_with_baseline,
+            "baseline": baseline,
             "total_entries": len(all_entries),
             "daily_totals": daily,
         }
