@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="60" fill="#5B9BD5"/>
+  <!-- Book left page -->
+  <path d="M30,35 L64,30 L64,95 L30,100 Z" fill="#FFFFFF" stroke="#E8E8E8" stroke-width="1"/>
+  <!-- Book right page -->
+  <path d="M64,30 L98,35 L98,100 L64,95 Z" fill="#F0F4F8" stroke="#E8E8E8" stroke-width="1"/>
+  <!-- Lines on left page -->
+  <line x1="36" y1="42" x2="58" y2="40" stroke="#CCCCCC" stroke-width="1.5"/>
+  <line x1="36" y1="52" x2="58" y2="50" stroke="#CCCCCC" stroke-width="1.5"/>
+  <line x1="36" y1="62" x2="58" y2="60" stroke="#CCCCCC" stroke-width="1.5"/>
+  <line x1="36" y1="72" x2="58" y2="70" stroke="#CCCCCC" stroke-width="1.5"/>
+  <line x1="36" y1="82" x2="58" y2="80" stroke="#CCCCCC" stroke-width="1.5"/>
+  <!-- Lines on right page -->
+  <line x1="70" y1="40" x2="92" y2="42" stroke="#CCCCCC" stroke-width="1.5"/>
+  <line x1="70" y1="50" x2="92" y2="52" stroke="#CCCCCC" stroke-width="1.5"/>
+  <line x1="70" y1="60" x2="92" y2="62" stroke="#CCCCCC" stroke-width="1.5"/>
+  <line x1="70" y1="70" x2="92" y2="72" stroke="#CCCCCC" stroke-width="1.5"/>
+  <line x1="70" y1="80" x2="92" y2="82" stroke="#CCCCCC" stroke-width="1.5"/>
+  <!-- Pen body -->
+  <path d="M95,20 L110,35 L105,40 L90,25 Z" fill="#E8743B"/>
+  <!-- Pen tip -->
+  <circle cx="87" cy="22" r="3" fill="#2c3e50"/>
+</svg>

@@ -1,0 +1,322 @@
+"""
+Main window for WordCounter app.
+Provides word count entry and today's summary.
+"""
+
+from datetime import datetime
+
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QFont, QIcon, QPixmap
+from PyQt5.QtWidgets import (
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
+
+from .database import Database
+from .stats_window import StatsWindow
+
+
+def create_app_icon() -> QIcon:
+    """Create a cute book-and-pen icon programmatically."""
+    from PyQt5.QtGui import QPainter, QBrush, QPen, QColor, QPainterPath
+    from PyQt5.QtCore import QRectF, QPointF
+
+    pixmap = QPixmap(128, 128)
+    pixmap.fill(Qt.transparent)
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+
+    # Background circle
+    painter.setBrush(QBrush(QColor("#5B9BD5")))
+    painter.setPen(Qt.NoPen)
+    painter.drawEllipse(QRectF(4, 4, 120, 120))
+
+    # Book shape (white)
+    painter.setBrush(QBrush(QColor("#FFFFFF")))
+    painter.setPen(QPen(QColor("#E8E8E8"), 1))
+    book_path = QPainterPath()
+    book_path.moveTo(30, 35)
+    book_path.lineTo(64, 30)
+    book_path.lineTo(64, 95)
+    book_path.lineTo(30, 100)
+    book_path.closeSubpath()
+    painter.drawPath(book_path)
+
+    # Book pages (right side)
+    painter.setBrush(QBrush(QColor("#F0F4F8")))
+    book_path2 = QPainterPath()
+    book_path2.moveTo(64, 30)
+    book_path2.lineTo(98, 35)
+    book_path2.lineTo(98, 100)
+    book_path2.lineTo(64, 95)
+    book_path2.closeSubpath()
+    painter.drawPath(book_path2)
+
+    # Lines on book
+    painter.setPen(QPen(QColor("#CCCCCC"), 1.5))
+    for y in range(42, 92, 10):
+        painter.drawLine(36, y, 58, y - 2)
+        painter.drawLine(70, y - 2, 92, y)
+
+    # Pen / quill
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(QBrush(QColor("#E8743B")))
+    pen_path = QPainterPath()
+    pen_path.moveTo(95, 20)
+    pen_path.lineTo(110, 35)
+    pen_path.lineTo(105, 40)
+    pen_path.lineTo(90, 25)
+    pen_path.closeSubpath()
+    painter.drawPath(pen_path)
+
+    # Pen tip
+    painter.setBrush(QBrush(QColor("#2c3e50")))
+    painter.drawEllipse(QRectF(87, 22, 6, 6))
+
+    painter.end()
+    return QIcon(pixmap)
+
+
+class SummaryCard(QFrame):
+    """A card showing a summary statistic."""
+
+    def __init__(self, title: str, value: str, color: str = "#5B9BD5"):
+        super().__init__()
+        self.setFrameShape(QFrame.StyledPanel)
+        self.setStyleSheet(f"""
+            SummaryCard {{
+                background-color: {color}15;
+                border: 1px solid {color}30;
+                border-radius: 10px;
+            }}
+        """)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 14, 16, 14)
+
+        title_label = QLabel(title)
+        title_label.setStyleSheet(f"color: {color}; font-size: 11px; font-weight: bold;")
+        layout.addWidget(title_label)
+
+        value_label = QLabel(value)
+        value_label.setStyleSheet(f"color: #2c3e50; font-size: 24px; font-weight: bold;")
+        layout.addWidget(value_label)
+
+
+class MainWindow(QMainWindow):
+    """Main application window."""
+
+    def __init__(self, db: Database):
+        super().__init__()
+        self.db = db
+        self.stats_window: StatsWindow | None = None
+        self.setWindowTitle("Word Counter ✍️")
+        self.setMinimumSize(450, 520)
+        self.setWindowIcon(create_app_icon())
+        self.setStyleSheet("QMainWindow { background-color: #ffffff; }")
+
+        self._build_ui()
+        self.refresh_summary()
+
+    def _build_ui(self):
+        central = QWidget()
+        self.setCentralWidget(central)
+        layout = QVBoxLayout(central)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(16)
+
+        # Title
+        title = QLabel("✍️ Word Counter")
+        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50;")
+        layout.addWidget(title)
+
+        # Input section
+        input_frame = QFrame()
+        input_frame.setStyleSheet("""
+            QFrame {
+                background-color: #f8f9fa;
+                border: 1px solid #e0e0e0;
+                border-radius: 12px;
+            }
+        """)
+        input_layout = QVBoxLayout(input_frame)
+        input_layout.setContentsMargins(20, 20, 20, 20)
+        input_layout.setSpacing(10)
+
+        input_label = QLabel("How many words did you write?")
+        input_label.setStyleSheet("font-size: 13px; color: #666;")
+        input_layout.addWidget(input_label)
+
+        input_row = QHBoxLayout()
+        self.word_input = QLineEdit()
+        self.word_input.setPlaceholderText("Enter word count...")
+        self.word_input.setStyleSheet("""
+            QLineEdit {
+                padding: 10px 14px;
+                border: 2px solid #ddd;
+                border-radius: 8px;
+                font-size: 16px;
+            }
+            QLineEdit:focus {
+                border-color: #5B9BD5;
+            }
+        """)
+        self.word_input.returnPressed.connect(self._on_add_entry)
+        input_row.addWidget(self.word_input, stretch=1)
+
+        add_btn = QPushButton("Log Words")
+        add_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #5B9BD5;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 10px 20px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #4A8AC5;
+            }
+            QPushButton:pressed {
+                background-color: #3A7AB5;
+            }
+        """)
+        add_btn.clicked.connect(self._on_add_entry)
+        input_row.addWidget(add_btn)
+        input_layout.addLayout(input_row)
+
+        # Optional note
+        self.note_input = QLineEdit()
+        self.note_input.setPlaceholderText("Optional note (e.g., 'Chapter 3 draft')...")
+        self.note_input.setStyleSheet("""
+            QLineEdit {
+                padding: 8px 14px;
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                font-size: 12px;
+                color: #888;
+            }
+            QLineEdit:focus {
+                border-color: #bbb;
+            }
+        """)
+        self.note_input.returnPressed.connect(self._on_add_entry)
+        input_layout.addWidget(self.note_input)
+
+        layout.addWidget(input_frame)
+
+        # Summary cards
+        cards_layout = QGridLayout()
+        cards_layout.setSpacing(10)
+
+        self.today_card = SummaryCard("TODAY'S WORDS", "0", "#5B9BD5")
+        self.streak_card = SummaryCard("CURRENT STREAK", "0 days", "#E8743B")
+        self.alltime_card = SummaryCard("ALL-TIME TOTAL", "0", "#27AE60")
+        self.entries_card = SummaryCard("TOTAL ENTRIES", "0", "#8E44AD")
+
+        cards_layout.addWidget(self.today_card, 0, 0)
+        cards_layout.addWidget(self.streak_card, 0, 1)
+        cards_layout.addWidget(self.alltime_card, 1, 0)
+        cards_layout.addWidget(self.entries_card, 1, 1)
+        layout.addLayout(cards_layout)
+
+        # Last entry info
+        self.last_entry_label = QLabel("")
+        self.last_entry_label.setStyleSheet("color: #999; font-size: 11px;")
+        self.last_entry_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.last_entry_label)
+
+        layout.addStretch()
+
+        # Stats button
+        stats_btn = QPushButton("📊 View Statistics")
+        stats_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ffffff;
+                color: #5B9BD5;
+                border: 2px solid #5B9BD5;
+                border-radius: 8px;
+                padding: 10px 20px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #5B9BD510;
+            }
+        """)
+        stats_btn.clicked.connect(self._open_stats)
+        layout.addWidget(stats_btn)
+
+    def _on_add_entry(self):
+        text = self.word_input.text().strip()
+        if not text:
+            return
+        try:
+            word_count = int(text)
+            if word_count <= 0:
+                QMessageBox.warning(self, "Invalid Input", "Please enter a positive number.")
+                return
+        except ValueError:
+            QMessageBox.warning(self, "Invalid Input", "Please enter a valid number.")
+            return
+
+        note = self.note_input.text().strip()
+        self.db.add_entry(word_count, note)
+        self.word_input.clear()
+        self.note_input.clear()
+        self.word_input.setFocus()
+        self.refresh_summary()
+
+        # Brief confirmation
+        self.last_entry_label.setText(f"✅ Logged {word_count:,} words!")
+        QTimer.singleShot(3000, lambda: self.refresh_summary())
+
+    def refresh_summary(self):
+        """Refresh the summary cards and last entry info."""
+        today_entries = self.db.get_today_entries()
+        today_total = sum(e["word_count"] for e in today_entries)
+
+        all_entries = self.db.get_all_entries()
+        all_time = sum(e["word_count"] for e in all_entries)
+
+        stats = self.db.get_stats(7)
+        streak = stats["current_streak"]
+
+        # Update cards
+        self.today_card.layout().itemAt(1).widget().setText(f"{today_total:,}")
+        self.streak_card.layout().itemAt(1).widget().setText(f"{streak} days")
+        self.alltime_card.layout().itemAt(1).widget().setText(f"{all_time:,}")
+        self.entries_card.layout().itemAt(1).widget().setText(f"{len(all_entries)}")
+
+        # Last entry info
+        if all_entries:
+            last = all_entries[-1]
+            ts = datetime.fromisoformat(last["timestamp"])
+            time_str = ts.strftime("%I:%M %p on %b %d")
+            self.last_entry_label.setText(f"Last entry: +{last['word_count']:,} words at {time_str}")
+        else:
+            self.last_entry_label.setText("No entries yet — start writing! 🚀")
+
+    def _open_stats(self):
+        if self.stats_window is None or not self.stats_window.isVisible():
+            self.stats_window = StatsWindow(self.db)
+            self.stats_window.show()
+            self.stats_window.activateWindow()
+        else:
+            self.stats_window.refresh()
+            self.stats_window.activateWindow()
+
+    def closeEvent(self, event):
+        """Close stats window when main window closes."""
+        if self.stats_window:
+            self.stats_window.close()
+        event.accept()
