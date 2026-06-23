@@ -156,13 +156,13 @@ class MainWindow(QMainWindow):
         input_layout.setContentsMargins(20, 20, 20, 20)
         input_layout.setSpacing(10)
 
-        input_label = QLabel("How many words did you write?")
+        input_label = QLabel("How many words did you write? (use negative for editing)")
         input_label.setStyleSheet("font-size: 13px; color: #666;")
         input_layout.addWidget(input_label)
 
         input_row = QHBoxLayout()
         self.word_input = QLineEdit()
-        self.word_input.setPlaceholderText("Enter word count...")
+        self.word_input.setPlaceholderText("Enter word count (e.g. 500 or -100 for editing)...")
         self.word_input.setStyleSheet("""
             QLineEdit {
                 padding: 10px 14px;
@@ -240,6 +240,13 @@ class MainWindow(QMainWindow):
         self.last_entry_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.last_entry_label)
 
+        # Recent additions summary
+        self.recent_label = QLabel("")
+        self.recent_label.setStyleSheet("color: #aaa; font-size: 10px;")
+        self.recent_label.setAlignment(Qt.AlignCenter)
+        self.recent_label.setWordWrap(True)
+        layout.addWidget(self.recent_label)
+
         layout.addStretch()
 
         # Stats button
@@ -280,14 +287,20 @@ class MainWindow(QMainWindow):
         history_btn.clicked.connect(self._open_history)
         layout.addWidget(history_btn)
 
+        # Version label in bottom margin
+        version_label = QLabel(f"v{get_current_version()}")
+        version_label.setStyleSheet("color: #ccc; font-size: 10px;")
+        version_label.setAlignment(Qt.AlignRight)
+        layout.addWidget(version_label)
+
     def _on_add_entry(self):
         text = self.word_input.text().strip()
         if not text:
             return
         try:
             word_count = int(text)
-            if word_count <= 0:
-                QMessageBox.warning(self, "Invalid Input", "Please enter a positive number.")
+            if word_count == 0:
+                QMessageBox.warning(self, "Invalid Input", "Please enter a non-zero number.")
                 return
         except ValueError:
             QMessageBox.warning(self, "Invalid Input", "Please enter a valid number.")
@@ -300,8 +313,11 @@ class MainWindow(QMainWindow):
         self.word_input.setFocus()
         self.refresh_summary()
 
-        # Brief confirmation
-        self.last_entry_label.setText(f"✅ Logged {word_count:,} words!")
+        # Brief confirmation with sign-aware formatting
+        if word_count > 0:
+            self.last_entry_label.setText(f"✅ Logged +{word_count:,} words!")
+        else:
+            self.last_entry_label.setText(f"✏️ Logged {word_count:,} words (editing)")
         QTimer.singleShot(3000, lambda: self.refresh_summary())
 
     def refresh_summary(self):
@@ -326,9 +342,24 @@ class MainWindow(QMainWindow):
             last = all_entries[-1]
             ts = datetime.fromisoformat(last["timestamp"])
             time_str = ts.strftime("%I:%M %p on %b %d")
-            self.last_entry_label.setText(f"Last entry: +{last['word_count']:,} words at {time_str}")
+            sign = "+" if last["word_count"] >= 0 else ""
+            self.last_entry_label.setText(f"Last entry: {sign}{last['word_count']:,} words at {time_str}")
         else:
             self.last_entry_label.setText("No entries yet — start writing! 🚀")
+
+        # Recent additions summary (last 3 entries)
+        if len(all_entries) >= 1:
+            recent = all_entries[-3:]
+            parts = []
+            for e in recent:
+                ts = datetime.fromisoformat(e["timestamp"])
+                time_str = ts.strftime("%I:%M %p")
+                sign = "+" if e["word_count"] >= 0 else ""
+                note_str = f" ({e['note']})" if e.get("note") else ""
+                parts.append(f"{sign}{e['word_count']:,} at {time_str}{note_str}")
+            self.recent_label.setText("Recent: " + "  |  ".join(parts))
+        else:
+            self.recent_label.setText("")
 
     def _open_stats(self):
         if self.stats_window is None or not self.stats_window.isVisible():

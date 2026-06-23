@@ -224,7 +224,8 @@ class StatsWindow(QWidget):
             row_layout.setContentsMargins(8, 4, 8, 4)
 
             date_str = ts.strftime("%b %d, %Y — %I:%M %p")
-            words_str = f"+{entry['word_count']:,} words"
+            sign = "+" if entry["word_count"] >= 0 else ""
+            words_str = f"{sign}{entry['word_count']:,} words"
 
             date_label = QLabel(date_str)
             date_label.setStyleSheet("color: #666; font-size: 11px;")

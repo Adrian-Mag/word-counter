@@ -96,8 +96,8 @@ class EditEntryDialog(QDialog):
     def _on_save(self):
         try:
             words = int(self.words_input.text().strip())
-            if words <= 0:
-                QMessageBox.warning(self, "Invalid", "Please enter a positive number.")
+            if words == 0:
+                QMessageBox.warning(self, "Invalid", "Please enter a non-zero number.")
                 return
         except ValueError:
             QMessageBox.warning(self, "Invalid", "Please enter a valid number.")
@@ -210,7 +210,8 @@ class HistoryWindow(QWidget):
             date_item.setData(Qt.UserRole, entry["id"])
             self.table.setItem(row, 0, date_item)
 
-            words_item = QTableWidgetItem(f"+{entry['word_count']:,}")
+            sign = "+" if entry["word_count"] >= 0 else ""
+            words_item = QTableWidgetItem(f"{sign}{entry['word_count']:,}")
             words_item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, 1, words_item)
 
