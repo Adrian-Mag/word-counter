@@ -94,6 +94,23 @@ class Database:
             conn.commit()
         self._backup_to_json()
 
+    def update_entry(self, entry_id: int, word_count: int, note: str = ""):
+        """Update an existing entry's word count and note."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "UPDATE entries SET word_count = ?, note = ? WHERE id = ?",
+                (word_count, note, entry_id),
+            )
+            conn.commit()
+        self._backup_to_json()
+
+    def clear_all(self):
+        """Delete all entries from the database."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("DELETE FROM entries")
+            conn.commit()
+        self._backup_to_json()
+
     def _backup_to_json(self):
         """Export all entries to a JSON backup file."""
         entries = self.get_all_entries()

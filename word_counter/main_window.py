@@ -22,6 +22,7 @@ from PyQt5.QtWidgets import (
 )
 
 from .database import Database
+from .history_window import HistoryWindow
 from .stats_window import StatsWindow
 from .update_checker import check_for_update, download_update, install_update, get_current_version
 
@@ -120,6 +121,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.db = db
         self.stats_window: StatsWindow | None = None
+        self.history_window: HistoryWindow | None = None
         self.setWindowTitle("Word Counter ✍️")
         self.setMinimumSize(450, 520)
         self.setWindowIcon(create_app_icon())
@@ -259,6 +261,25 @@ class MainWindow(QMainWindow):
         stats_btn.clicked.connect(self._open_stats)
         layout.addWidget(stats_btn)
 
+        # History button
+        history_btn = QPushButton("📋 View History")
+        history_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ffffff;
+                color: #8E44AD;
+                border: 2px solid #8E44AD;
+                border-radius: 8px;
+                padding: 10px 20px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #8E44AD10;
+            }
+        """)
+        history_btn.clicked.connect(self._open_history)
+        layout.addWidget(history_btn)
+
     def _on_add_entry(self):
         text = self.word_input.text().strip()
         if not text:
@@ -318,6 +339,15 @@ class MainWindow(QMainWindow):
             self.stats_window.refresh()
             self.stats_window.activateWindow()
 
+    def _open_history(self):
+        if self.history_window is None or not self.history_window.isVisible():
+            self.history_window = HistoryWindow(self.db, on_data_changed=self.refresh_summary)
+            self.history_window.show()
+            self.history_window.activateWindow()
+        else:
+            self.history_window.refresh()
+            self.history_window.activateWindow()
+
     def _check_for_updates(self):
         """Check GitHub for a newer release (runs silently 2s after startup)."""
         update_info = check_for_update()
@@ -373,7 +403,9 @@ class MainWindow(QMainWindow):
             )
 
     def closeEvent(self, event):
-        """Close stats window when main window closes."""
+        """Close child windows when main window closes."""
         if self.stats_window:
             self.stats_window.close()
+        if self.history_window:
+            self.history_window.close()
         event.accept()
