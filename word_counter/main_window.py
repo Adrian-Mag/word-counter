@@ -9,6 +9,7 @@ from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtWidgets import (
     QDialog,
+    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -297,6 +298,43 @@ class HomePage(QWidget):
         new_btn.clicked.connect(lambda: self.on_new_project() if self.on_new_project else None)
         layout.addWidget(new_btn)
 
+        # Export buttons row
+        export_row = QHBoxLayout()
+        export_row.setSpacing(8)
+
+        export_json_btn = QPushButton("📥 Export JSON")
+        export_json_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ffffff;
+                color: #666;
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                padding: 6px 14px;
+                font-size: 11px;
+            }
+            QPushButton:hover { background-color: #f0f0f0; }
+        """)
+        export_json_btn.clicked.connect(self._on_export_json)
+        export_row.addWidget(export_json_btn)
+
+        export_csv_btn = QPushButton("📥 Export CSV")
+        export_csv_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ffffff;
+                color: #666;
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                padding: 6px 14px;
+                font-size: 11px;
+            }
+            QPushButton:hover { background-color: #f0f0f0; }
+        """)
+        export_csv_btn.clicked.connect(self._on_export_csv)
+        export_row.addWidget(export_csv_btn)
+
+        export_row.addStretch()
+        layout.addLayout(export_row)
+
         # Projects container in a scroll area
         self.projects_container = QWidget()
         self.projects_layout = QVBoxLayout(self.projects_container)
@@ -347,6 +385,28 @@ class HomePage(QWidget):
     def _open_project(self, project: dict):
         if self.on_open_project:
             self.on_open_project(project)
+
+    def _on_export_json(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export to JSON", "wordcounter_export.json", "JSON files (*.json)"
+        )
+        if not path:
+            return
+        if self.db.export_to_json(path):
+            QMessageBox.information(self, "Export Successful", f"Data exported to:\n{path}")
+        else:
+            QMessageBox.warning(self, "Export Failed", "Could not export data. Please try again.")
+
+    def _on_export_csv(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export to CSV", "wordcounter_export.csv", "CSV files (*.csv)"
+        )
+        if not path:
+            return
+        if self.db.export_to_csv(path):
+            QMessageBox.information(self, "Export Successful", f"Data exported to:\n{path}")
+        else:
+            QMessageBox.warning(self, "Export Failed", "Could not export data. Please try again.")
 
 
 class MainWindow(QMainWindow):
