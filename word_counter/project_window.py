@@ -1,12 +1,12 @@
 """
-Project window for WordCounter app.
+Project page for WordCounter app.
 Shows word entry, summary, and navigation to stats/history for a single project.
+Designed as a page inside a QStackedWidget, not a separate window.
 """
 
 from datetime import datetime
 
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (
     QDialog,
     QFrame,
@@ -14,7 +14,6 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMainWindow,
     QMessageBox,
     QPushButton,
     QVBoxLayout,
@@ -22,9 +21,7 @@ from PyQt5.QtWidgets import (
 )
 
 from .database import Database
-from .history_window import HistoryWindow
-from .stats_window import StatsWindow
-from .update_checker import check_for_update, download_update, install_update, get_current_version
+from .update_checker import get_current_version
 
 
 class EditProjectDialog(QDialog):
@@ -144,35 +141,30 @@ class SummaryCard(QFrame):
         layout.addWidget(value_label)
 
 
-class ProjectWindow(QMainWindow):
-    """Main window when inside a project — word entry, summary, stats, history."""
+class ProjectPage(QWidget):
+    """Page for a single project — word entry, summary, navigation to stats/history."""
 
-    def __init__(self, db: Database, project_id: int, on_back=None):
+    def __init__(self, db: Database, project_id: int, on_back=None, on_stats=None, on_history=None, on_project_deleted=None):
         super().__init__()
         self.db = db
         self.project_id = project_id
         self.on_back = on_back
-        self.stats_window: StatsWindow | None = None
-        self.history_window: HistoryWindow | None = None
+        self.on_stats = on_stats
+        self.on_history = on_history
+        self.on_project_deleted = on_project_deleted
 
         project = db.get_project(project_id)
         self.project_name = project["name"] if project else "Project"
-        self.setWindowTitle(f"Word Counter ✍️ — {self.project_name}")
-        self.setMinimumSize(450, 580)
-        self.setStyleSheet("QMainWindow { background-color: #ffffff; }")
+        self.setStyleSheet("background-color: #ffffff;")
 
         self._build_ui()
-        self.refresh_summary()
-        QTimer.singleShot(2000, self._check_for_updates)
 
     def _build_ui(self):
-        central = QWidget()
-        self.setCentralWidget(central)
-        layout = QVBoxLayout(central)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
 
-        # Top bar: back button + project name
+        # Top bar: back button + edit/delete
         top_bar = QHBoxLayout()
         back_btn = QPushButton("← All Projects")
         back_btn.setStyleSheet("""
@@ -190,18 +182,6 @@ class ProjectWindow(QMainWindow):
         top_bar.addWidget(back_btn)
         top_bar.addStretch()
 
-        delete_btn = QPushButton("🗑 Delete Project")
-        delete_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #ffffff;
-                color: #e74c3c;
-                border: 1px solid #e74c3c;
-                border-radius: 6px;
-                padding: 6px 14px;
-                font-size: 11px;
-            }
-            QPushButton:hover { background-color: #e74c3c10; }
-        """)
         edit_btn = QPushButton("✏️ Edit Project")
         edit_btn.setStyleSheet("""
             QPushButton {
@@ -234,9 +214,9 @@ class ProjectWindow(QMainWindow):
         layout.addLayout(top_bar)
 
         # Title
-        title = QLabel(f"✍️ {self.project_name}")
-        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50;")
-        layout.addWidget(title)
+        self.title_label = QLabel(f"✍️ {self.project_name}")
+        self.title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50;")
+        layout.addWidget(self.title_label)
 
         # Input section
         input_frame = QFrame()
@@ -360,7 +340,7 @@ class ProjectWindow(QMainWindow):
                 background-color: #5B9BD510;
             }
         """)
-        stats_btn.clicked.connect(self._open_stats)
+        stats_btn.clicked.connect(lambda: self.on_stats() if self.on_stats else None)
         layout.addWidget(stats_btn)
 
         # History button
@@ -379,7 +359,7 @@ class ProjectWindow(QMainWindow):
                 background-color: #8E44AD10;
             }
         """)
-        history_btn.clicked.connect(self._open_history)
+        history_btn.clicked.connect(lambda: self.on_history() if self.on_history else None)
         layout.addWidget(history_btn)
 
         # Version label
@@ -387,6 +367,10 @@ class ProjectWindow(QMainWindow):
         version_label.setStyleSheet("color: #ccc; font-size: 10px;")
         version_label.setAlignment(Qt.AlignRight)
         layout.addWidget(version_label)
+
+    def on_show(self):
+        """Called when this page is switched to."""
+        self.refresh_summary()
 
     def _on_add_entry(self):
         text = self.word_input.text().strip()
@@ -458,7 +442,6 @@ class ProjectWindow(QMainWindow):
 
     def _go_back(self):
         if self.on_back:
-            self.close()
             self.on_back()
 
     def _on_edit_project(self):
@@ -470,10 +453,7 @@ class ProjectWindow(QMainWindow):
             name, baseline = dialog.get_values()
             self.db.update_project(self.project_id, name=name, baseline_word_count=baseline)
             self.project_name = name
-            self.setWindowTitle(f"Word Counter ✍️ — {name}")
-            # Update the title label in the UI
-            title_label = self.centralWidget().layout().itemAt(1).widget()
-            title_label.setText(f"✍️ {name}")
+            self.title_label.setText(f"✍️ {name}")
             self.refresh_summary()
 
     def _on_delete_project(self):
@@ -507,92 +487,5 @@ class ProjectWindow(QMainWindow):
 
         self.db.delete_project(self.project_id)
         QMessageBox.information(self, "Deleted", f"Project '{self.project_name}' has been deleted.\nA backup was saved.")
-        if self.on_back:
-            self.close()
-            self.on_back()
-
-    def _open_stats(self):
-        if self.stats_window is None or not self.stats_window.isVisible():
-            self.stats_window = StatsWindow(self.db, self.project_id)
-            self.stats_window.show()
-            self.stats_window.activateWindow()
-        else:
-            self.stats_window.refresh()
-            self.stats_window.activateWindow()
-
-    def _open_history(self):
-        if self.history_window is None or not self.history_window.isVisible():
-            self.history_window = HistoryWindow(self.db, self.project_id, on_data_changed=self.refresh_summary)
-            self.history_window.show()
-            self.history_window.activateWindow()
-        else:
-            self.history_window.refresh()
-            self.history_window.activateWindow()
-
-    def _check_for_updates(self):
-        """Check GitHub for a newer release (runs silently 2s after startup)."""
-        update_info = check_for_update()
-        if update_info is None:
-            return
-
-        current = get_current_version()
-        latest = update_info["version"]
-        reply = QMessageBox.question(
-            self,
-            "Update Available!",
-            f"A new version is available!\n\n"
-            f"Current version: v{current}\n"
-            f"New version: v{latest}\n\n"
-            f"Your data will be preserved.\n\n"
-            f"Would you like to update now?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes,
-        )
-        if reply != QMessageBox.Yes:
-            return
-
-        expected_size = update_info.get("size", 0)
-        size_mb = f"({expected_size / 1024 / 1024:.1f} MB)" if expected_size else ""
-        from PyQt5.QtWidgets import QProgressDialog
-        progress = QProgressDialog(f"Downloading update {size_mb}...", "Cancel", 0, 100, self)
-        progress.setWindowTitle("Updating WordCounter")
-        progress.setWindowModality(Qt.WindowModal)
-        progress.setMinimumDuration(0)
-        progress.setValue(0)
-        progress.setMinimumWidth(350)
-
-        def on_progress(downloaded, total):
-            percent = int((downloaded / total) * 100)
-            progress.setValue(percent)
-            mb_done = downloaded / 1024 / 1024
-            mb_total = total / 1024 / 1024
-            progress.setLabelText(f"Downloading... {mb_done:.1f} / {mb_total:.1f} MB ({percent}%)")
-
-        try:
-            new_exe = download_update(update_info["url"], expected_size, on_progress)
-            progress.close()
-            QMessageBox.information(
-                self,
-                "Update Ready",
-                "The app will now restart to complete the update.\n"
-                "Your data is safe!",
-            )
-            install_update(new_exe)
-        except Exception as e:
-            progress.close()
-            QMessageBox.warning(
-                self,
-                "Update Failed",
-                f"Could not download the update.\n"
-                f"Please download it manually from:\n"
-                f"https://github.com/Adrian-Mag/word-counter/releases\n\n"
-                f"Error: {e}",
-            )
-
-    def closeEvent(self, event):
-        """Close child windows when main window closes."""
-        if self.stats_window:
-            self.stats_window.close()
-        if self.history_window:
-            self.history_window.close()
-        event.accept()
+        if self.on_project_deleted:
+            self.on_project_deleted()

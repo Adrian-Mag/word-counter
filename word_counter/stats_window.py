@@ -1,6 +1,7 @@
 """
-Stats window for WordCounter app.
+Stats page for WordCounter app.
 Shows charts and statistics using matplotlib.
+Designed as a page inside a QStackedWidget, not a separate window.
 """
 
 from datetime import datetime
@@ -13,6 +14,7 @@ from PyQt5.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QPushButton,
     QScrollArea,
     QVBoxLayout,
     QWidget,
@@ -51,8 +53,8 @@ class StatsCard(QFrame):
             layout.addWidget(sub_label)
 
 
-class StatsWindow(QWidget):
-    """Window showing writing statistics and charts."""
+class StatsPage(QWidget):
+    """Page showing writing statistics and charts."""
 
     PERIOD_OPTIONS = [
         ("Past Week", 7),
@@ -60,23 +62,38 @@ class StatsWindow(QWidget):
         ("Past 6 Months", 180),
     ]
 
-    def __init__(self, db: Database, project_id: int):
+    def __init__(self, db: Database, project_id: int, on_back=None):
         super().__init__()
         self.db = db
         self.project_id = project_id
-        project = db.get_project(project_id)
-        project_name = project["name"] if project else "Project"
-        self.setWindowTitle(f"Writing Stats — {project_name}")
-        self.setMinimumSize(700, 600)
+        self.on_back = on_back
         self.setStyleSheet("background-color: #ffffff;")
 
         self._build_ui()
-        self.refresh()
 
     def _build_ui(self):
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setContentsMargins(24, 24, 24, 24)
         main_layout.setSpacing(16)
+
+        # Top bar with back button
+        top_bar = QHBoxLayout()
+        back_btn = QPushButton("← Back to Project")
+        back_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f0f0f0;
+                color: #666;
+                border: none;
+                border-radius: 6px;
+                padding: 6px 14px;
+                font-size: 12px;
+            }
+            QPushButton:hover { background-color: #e0e0e0; }
+        """)
+        back_btn.clicked.connect(self._go_back)
+        top_bar.addWidget(back_btn)
+        top_bar.addStretch()
+        main_layout.addLayout(top_bar)
 
         # Header
         header_layout = QHBoxLayout()
@@ -133,6 +150,14 @@ class StatsWindow(QWidget):
             QScrollBar:vertical { width: 8px; }
         """)
         main_layout.addWidget(scroll)
+
+    def _go_back(self):
+        if self.on_back:
+            self.on_back()
+
+    def on_show(self):
+        """Called when this page is switched to."""
+        self.refresh()
 
     def refresh(self):
         """Refresh all stats and charts."""

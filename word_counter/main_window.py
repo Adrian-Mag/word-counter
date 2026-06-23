@@ -1,6 +1,6 @@
 """
 Main window for WordCounter app.
-Home screen showing all projects with create/delete functionality.
+Single window with QStackedWidget for navigation between Home, Project, Stats, and History pages.
 """
 
 from datetime import datetime
@@ -16,14 +16,18 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QProgressDialog,
     QPushButton,
     QScrollArea,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from .database import Database
-from .project_window import ProjectWindow
+from .history_window import HistoryPage
+from .project_window import ProjectPage
+from .stats_window import StatsPage
 from .update_checker import check_for_update, download_update, install_update, get_current_version
 
 
@@ -250,26 +254,20 @@ class ProjectCard(QFrame):
             self.on_click(self.project)
 
 
-class MainWindow(QMainWindow):
-    """Home screen showing all projects."""
+class HomePage(QWidget):
+    """Home page showing all projects."""
 
-    def __init__(self, db: Database):
+    def __init__(self, db: Database, on_open_project=None, on_new_project=None):
         super().__init__()
         self.db = db
-        self.project_window: ProjectWindow | None = None
-        self.setWindowTitle("Word Counter ✍️")
-        self.setMinimumSize(500, 600)
-        self.setWindowIcon(create_app_icon())
-        self.setStyleSheet("QMainWindow { background-color: #ffffff; }")
+        self.on_open_project = on_open_project
+        self.on_new_project = on_new_project
+        self.setStyleSheet("background-color: #ffffff;")
 
         self._build_ui()
-        self.refresh_projects()
-        QTimer.singleShot(2000, self._check_for_updates)
 
     def _build_ui(self):
-        central = QWidget()
-        self.setCentralWidget(central)
-        layout = QVBoxLayout(central)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
 
@@ -296,7 +294,7 @@ class MainWindow(QMainWindow):
             }
             QPushButton:hover { background-color: #4A8AC5; }
         """)
-        new_btn.clicked.connect(self._on_new_project)
+        new_btn.clicked.connect(lambda: self.on_new_project() if self.on_new_project else None)
         layout.addWidget(new_btn)
 
         # Projects container in a scroll area
@@ -321,6 +319,10 @@ class MainWindow(QMainWindow):
         version_label.setAlignment(Qt.AlignRight)
         layout.addWidget(version_label)
 
+    def on_show(self):
+        """Called when this page is switched to."""
+        self.refresh_projects()
+
     def refresh_projects(self):
         """Rebuild the project cards."""
         # Clear existing cards (keep the stretch)
@@ -342,23 +344,130 @@ class MainWindow(QMainWindow):
             card = ProjectCard(project, on_click=self._open_project)
             self.projects_layout.insertWidget(self.projects_layout.count() - 1, card)
 
+    def _open_project(self, project: dict):
+        if self.on_open_project:
+            self.on_open_project(project)
+
+
+class MainWindow(QMainWindow):
+    """Single-window app with QStackedWidget for page navigation."""
+
+    PAGE_HOME = 0
+    PAGE_PROJECT = 1
+    PAGE_STATS = 2
+    PAGE_HISTORY = 3
+
+    def __init__(self, db: Database):
+        super().__init__()
+        self.db = db
+        self.current_project_id: int | None = None
+        self.setWindowTitle("Word Counter ✍️")
+        self.setMinimumSize(700, 650)
+        self.setWindowIcon(create_app_icon())
+        self.setStyleSheet("QMainWindow { background-color: #ffffff; }")
+
+        self._build_ui()
+        QTimer.singleShot(2000, self._check_for_updates)
+
+    def _build_ui(self):
+        self.stack = QStackedWidget()
+        self.setCentralWidget(self.stack)
+
+        # Home page
+        self.home_page = HomePage(
+            self.db,
+            on_open_project=self._open_project,
+            on_new_project=self._on_new_project,
+        )
+        self.stack.addWidget(self.home_page)  # index 0
+
+        # Placeholder for project page (created on demand)
+        self.project_page: ProjectPage | None = None
+        self.stack.addWidget(QWidget())  # index 1, placeholder
+
+        # Placeholder for stats page
+        self.stats_page: StatsPage | None = None
+        self.stack.addWidget(QWidget())  # index 2, placeholder
+
+        # Placeholder for history page
+        self.history_page: HistoryPage | None = None
+        self.stack.addWidget(QWidget())  # index 3, placeholder
+
+        self.stack.setCurrentIndex(self.PAGE_HOME)
+        self.home_page.refresh_projects()
+
+    def _switch_to_page(self, index: int):
+        widget = self.stack.widget(index)
+        if hasattr(widget, "on_show"):
+            widget.on_show()
+        self.stack.setCurrentIndex(index)
+
+    def _open_project(self, project: dict):
+        self.current_project_id = project["id"]
+
+        # Replace project page
+        if self.project_page:
+            self.stack.removeWidget(self.project_page)
+            self.project_page.deleteLater()
+
+        self.project_page = ProjectPage(
+            self.db,
+            project["id"],
+            on_back=self._go_home,
+            on_stats=self._go_stats,
+            on_history=self._go_history,
+            on_project_deleted=self._on_project_deleted,
+        )
+        self.stack.insertWidget(self.PAGE_PROJECT, self.project_page)
+        self.stack.removeWidget(self.stack.widget(self.PAGE_PROJECT + 1))
+        self._switch_to_page(self.PAGE_PROJECT)
+
+    def _go_home(self):
+        self.current_project_id = None
+        self._switch_to_page(self.PAGE_HOME)
+
+    def _go_stats(self):
+        if self.current_project_id is None:
+            return
+        if self.stats_page:
+            self.stack.removeWidget(self.stats_page)
+            self.stats_page.deleteLater()
+
+        self.stats_page = StatsPage(
+            self.db,
+            self.current_project_id,
+            on_back=lambda: self._switch_to_page(self.PAGE_PROJECT),
+        )
+        self.stack.insertWidget(self.PAGE_STATS, self.stats_page)
+        self.stack.removeWidget(self.stack.widget(self.PAGE_STATS + 1))
+        self._switch_to_page(self.PAGE_STATS)
+
+    def _go_history(self):
+        if self.current_project_id is None:
+            return
+        if self.history_page:
+            self.stack.removeWidget(self.history_page)
+            self.history_page.deleteLater()
+
+        self.history_page = HistoryPage(
+            self.db,
+            self.current_project_id,
+            on_back=lambda: self._switch_to_page(self.PAGE_PROJECT),
+            on_data_changed=lambda: self.project_page.refresh_summary() if self.project_page else None,
+        )
+        self.stack.insertWidget(self.PAGE_HISTORY, self.history_page)
+        self.stack.removeWidget(self.stack.widget(self.PAGE_HISTORY + 1))
+        self._switch_to_page(self.PAGE_HISTORY)
+
     def _on_new_project(self):
         dialog = NewProjectDialog(self)
         if dialog.exec_() == QDialog.Accepted:
             name, baseline = dialog.get_values()
             self.db.create_project(name, baseline)
-            self.refresh_projects()
+            self.home_page.refresh_projects()
 
-    def _open_project(self, project: dict):
-        self.hide()
-        self.project_window = ProjectWindow(self.db, project["id"], on_back=self._on_project_back)
-        self.project_window.show()
-
-    def _on_project_back(self):
-        self.project_window = None
-        self.refresh_projects()
-        self.show()
-        self.activateWindow()
+    def _on_project_deleted(self):
+        self._go_home()
 
     def _check_for_updates(self):
         """Check GitHub for a newer release (runs silently 2s after startup)."""
@@ -382,7 +491,6 @@ class MainWindow(QMainWindow):
         if reply != QMessageBox.Yes:
             return
 
-        from PyQt5.QtWidgets import QProgressDialog
         expected_size = update_info.get("size", 0)
         size_mb = f"({expected_size / 1024 / 1024:.1f} MB)" if expected_size else ""
         progress = QProgressDialog(f"Downloading update {size_mb}...", "Cancel", 0, 100, self)
@@ -419,9 +527,3 @@ class MainWindow(QMainWindow):
                 f"https://github.com/Adrian-Mag/word-counter/releases\n\n"
                 f"Error: {e}",
             )
-
-    def closeEvent(self, event):
-        """Close project window when home closes."""
-        if self.project_window:
-            self.project_window.close()
-        event.accept()

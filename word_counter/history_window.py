@@ -1,6 +1,7 @@
 """
-History window for WordCounter app.
+History page for WordCounter app.
 Shows all entries with edit, delete, and clear-all functionality.
+Designed as a page inside a QStackedWidget, not a separate window.
 """
 
 from datetime import datetime
@@ -14,7 +15,6 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -108,27 +108,42 @@ class EditEntryDialog(QDialog):
         return int(self.words_input.text().strip()), self.note_input.text().strip()
 
 
-class HistoryWindow(QWidget):
-    """Window showing all entries with edit/delete/clear-all functionality."""
+class HistoryPage(QWidget):
+    """Page showing all entries with edit/delete/clear-all functionality."""
 
-    def __init__(self, db: Database, project_id: int, on_data_changed=None):
+    def __init__(self, db: Database, project_id: int, on_back=None, on_data_changed=None):
         super().__init__()
         self.db = db
         self.project_id = project_id
+        self.on_back = on_back
         self.on_data_changed = on_data_changed
-        project = db.get_project(project_id)
-        project_name = project["name"] if project else "Project"
-        self.setWindowTitle(f"Entry History — {project_name}")
-        self.setMinimumSize(600, 500)
         self.setStyleSheet("background-color: #ffffff;")
 
         self._build_ui()
-        self.refresh()
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
+
+        # Top bar with back button
+        top_bar = QHBoxLayout()
+        back_btn = QPushButton("← Back to Project")
+        back_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f0f0f0;
+                color: #666;
+                border: none;
+                border-radius: 6px;
+                padding: 6px 14px;
+                font-size: 12px;
+            }
+            QPushButton:hover { background-color: #e0e0e0; }
+        """)
+        back_btn.clicked.connect(self._go_back)
+        top_bar.addWidget(back_btn)
+        top_bar.addStretch()
+        layout.addLayout(top_bar)
 
         # Header
         header_row = QHBoxLayout()
@@ -196,6 +211,14 @@ class HistoryWindow(QWidget):
         clear_btn.clicked.connect(self._on_clear_all)
         bottom_row.addWidget(clear_btn)
         layout.addLayout(bottom_row)
+
+    def _go_back(self):
+        if self.on_back:
+            self.on_back()
+
+    def on_show(self):
+        """Called when this page is switched to."""
+        self.refresh()
 
     def refresh(self):
         """Rebuild the table from the database."""
