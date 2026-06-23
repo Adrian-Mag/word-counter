@@ -29,16 +29,25 @@ jobs:
       - name: Convert SVG to ICO
         shell: pwsh
         run: |
-          pip install Pillow cairosvg
           python -c "
-          import cairosvg
-          from PIL import Image
-          import io
-          svg = open('assets/icon.svg', 'rb').read()
-          png_data = cairosvg.svg2png(bytestring=svg, output_width=256, output_height=256)
-          img = Image.open(io.BytesIO(png_data))
-          sizes = [(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)]
-          img.save('assets/icon.ico', format='ICO', sizes=sizes)
+          from PyQt5.QtSvg import QSvgRenderer
+          from PyQt5.QtGui import QPixmap, QPainter, QImage
+          from PyQt5.QtCore import QByteArray, QSize
+          import struct, io
+
+          svg_data = open('assets/icon.svg', 'rb').read()
+          renderer = QSvgRenderer(QByteArray(svg_data))
+
+          # Render at 256x256
+          img = QImage(256, 256, QImage.Format_ARGB32)
+          img.fill(0)
+          painter = QPainter(img)
+          renderer.render(painter)
+          painter.end()
+
+          # Convert to QPixmap and save as ICO
+          pixmap = QPixmap.fromImage(img)
+          pixmap.save('assets/icon.ico', 'ICO')
           print('Icon created')
           "
 
