@@ -10,7 +10,7 @@ from pathlib import Path
 block_cipher = None
 
 a = Analysis(
-    ['word_counter/__main__.py'],
+    ['run.py'],
     pathex=[],
     binaries=[],
     datas=[
