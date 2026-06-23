@@ -53,6 +53,29 @@ def install_crash_handler(app: QApplication):
     sys.excepthook = exception_hook
 
 
+def _is_process_alive(pid: int) -> bool:
+    """Check if a process with the given PID is running. Cross-platform."""
+    if os.name == "nt":
+        # On Windows, use ctypes to call OpenProcess
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if handle:
+            kernel32.CloseHandle(handle)
+            return True
+        return False
+    else:
+        # On Unix, use os.kill with signal 0
+        try:
+            os.kill(pid, 0)
+            return True
+        except (ProcessLookupError, PermissionError):
+            return False
+        except OSError:
+            return False
+
+
 def check_single_instance():
     """Ensure only one instance of the app is running. Returns True if OK to proceed."""
     lock_file = get_app_data_dir() / "wordcounter.lock"
@@ -67,22 +90,21 @@ def check_single_instance():
         try:
             with open(lock_file, "r") as f:
                 old_pid = int(f.read().strip())
-            try:
-                os.kill(old_pid, 0)  # Check if process exists (Unix)
+            if _is_process_alive(old_pid):
                 # Process is alive — show message and exit
                 QMessageBox.warning(None, "Already Running",
                                     "Word Counter is already running.\n"
                                     "Please check your system tray or taskbar.")
                 return False
-            except (ProcessLookupError, PermissionError):
+            else:
                 # Process is dead — steal the lock
                 lock_file.unlink()
                 fd = os.open(str(lock_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
                 os.write(fd, str(os.getpid()).encode())
                 os.close(fd)
                 return True
-        except (ValueError, IOError):
-            # Can't read lock file — just overwrite it
+        except (ValueError, IOError, OSError):
+            # Can't read lock file or other error — just overwrite it
             lock_file.unlink(missing_ok=True)
             fd = os.open(str(lock_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             os.write(fd, str(os.getpid()).encode())
