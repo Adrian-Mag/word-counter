@@ -26,31 +26,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install PyQt5 matplotlib pyinstaller
 
-      - name: Convert SVG to ICO
-        shell: pwsh
-        run: |
-          python -c "
-          from PyQt5.QtSvg import QSvgRenderer
-          from PyQt5.QtGui import QPixmap, QPainter, QImage
-          from PyQt5.QtCore import QByteArray, QSize
-          import struct, io
-
-          svg_data = open('assets/icon.svg', 'rb').read()
-          renderer = QSvgRenderer(QByteArray(svg_data))
-
-          # Render at 256x256
-          img = QImage(256, 256, QImage.Format_ARGB32)
-          img.fill(0)
-          painter = QPainter(img)
-          renderer.render(painter)
-          painter.end()
-
-          # Convert to QPixmap and save as ICO
-          pixmap = QPixmap.fromImage(img)
-          pixmap.save('assets/icon.ico', 'ICO')
-          print('Icon created')
-          "
-
       - name: Build executable
         run: pyinstaller word_counter.spec --noconfirm
 
