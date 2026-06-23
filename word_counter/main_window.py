@@ -5,7 +5,7 @@ Provides word count entry and today's summary.
 
 from datetime import datetime
 
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QFont, QIcon, QPixmap
 from PyQt5.QtWidgets import (
     QFrame,
@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QProgressDialog,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -22,6 +23,7 @@ from PyQt5.QtWidgets import (
 
 from .database import Database
 from .stats_window import StatsWindow
+from .update_checker import check_for_update, download_update, install_update, get_current_version
 
 
 def create_app_icon() -> QIcon:
@@ -125,6 +127,7 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self.refresh_summary()
+        QTimer.singleShot(2000, self._check_for_updates)
 
     def _build_ui(self):
         central = QWidget()
@@ -314,6 +317,60 @@ class MainWindow(QMainWindow):
         else:
             self.stats_window.refresh()
             self.stats_window.activateWindow()
+
+    def _check_for_updates(self):
+        """Check GitHub for a newer release (runs silently 2s after startup)."""
+        update_info = check_for_update()
+        if update_info is None:
+            return
+
+        current = get_current_version()
+        latest = update_info["version"]
+        reply = QMessageBox.question(
+            self,
+            "Update Available!",
+            f"A new version is available!\n\n"
+            f"Current version: v{current}\n"
+            f"New version: v{latest}\n\n"
+            f"Your data will be preserved.\n\n"
+            f"Would you like to update now?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        # Download with progress bar
+        progress = QProgressDialog("Downloading update...", "Cancel", 0, 100, self)
+        progress.setWindowTitle("Updating WordCounter")
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+
+        def on_progress(downloaded, total):
+            percent = int((downloaded / total) * 100)
+            progress.setValue(percent)
+
+        try:
+            new_exe = download_update(update_info["url"], on_progress)
+            progress.close()
+            QMessageBox.information(
+                self,
+                "Update Ready",
+                "The app will now restart to complete the update.\n"
+                "Your data is safe!",
+            )
+            install_update(new_exe)
+        except Exception as e:
+            progress.close()
+            QMessageBox.warning(
+                self,
+                "Update Failed",
+                f"Could not download the update.\n"
+                f"Please download it manually from:\n"
+                f"https://github.com/Adrian-Mag/word-counter/releases\n\n"
+                f"Error: {e}",
+            )
 
     def closeEvent(self, event):
         """Close stats window when main window closes."""
