@@ -21,6 +21,7 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QScrollArea,
     QStackedWidget,
+    QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
@@ -187,6 +188,169 @@ class NewProjectDialog(QDialog):
 
     def get_values(self) -> tuple[str, int]:
         return self.name_input.text().strip(), int(self.baseline_input.text().strip() or "0")
+
+
+class UserManualDialog(QDialog):
+    """A non-modal dialog showing the user manual."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Word Counter — User Manual")
+        self.setMinimumSize(600, 500)
+        self.setStyleSheet("background-color: #ffffff;")
+        self.setModal(False)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        browser = QTextBrowser()
+        browser.setOpenExternalLinks(True)
+        browser.setStyleSheet("""
+            QTextBrowser {
+                border: none;
+                padding: 24px;
+                font-size: 13px;
+                color: #2c3e50;
+                background-color: #ffffff;
+            }
+        """)
+        browser.setHtml(self._manual_html())
+        layout.addWidget(browser)
+
+        # Close button
+        close_bar = QHBoxLayout()
+        close_bar.setContentsMargins(16, 12, 16, 12)
+        close_bar.addStretch()
+        close_btn = QPushButton("Close")
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #5B9BD5;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 24px;
+                font-size: 13px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #4A8AC5; }
+        """)
+        close_btn.clicked.connect(self.accept)
+        close_bar.addWidget(close_btn)
+        layout.addLayout(close_bar)
+
+    def _manual_html(self) -> str:
+        return """
+        <h1 style="color: #2c3e50;">✍️ Word Counter — User Manual</h1>
+        <p style="color: #888;">Version {version}</p>
+
+        <h2 style="color: #5B9BD5;">Getting Started</h2>
+        <p>Word Counter helps you track your writing progress across multiple projects.
+        Each project has its own word count entries, statistics, and history.</p>
+
+        <h3>Creating a Project</h3>
+        <ol>
+            <li>Click the <b>+ New Project</b> button on the home screen.</li>
+            <li>Enter a project name (e.g. "My Novel").</li>
+            <li>Optionally set a <b>baseline word count</b> — this is your starting word count
+                if you already have words written before using Word Counter.</li>
+            <li>Click <b>Create</b>.</li>
+        </ol>
+
+        <h3>Logging Words</h3>
+        <ol>
+            <li>Open a project by clicking its card on the home screen.</li>
+            <li>Enter the number of words you wrote in the input field.</li>
+            <li>Use <b>negative numbers</b> for editing (e.g. <code>-100</code> means you cut 100 words).</li>
+            <li>Add an optional note (e.g. "Chapter 3 draft").</li>
+            <li>Press <b>Enter</b> or click <b>Log Words</b>.</li>
+        </ol>
+
+        <h2 style="color: #5B9BD5;">Project Page</h2>
+        <p>The project page shows:</p>
+        <ul>
+            <li><b>Today's Words</b> — total words logged today.</li>
+            <li><b>Current Streak</b> — consecutive days with at least one entry.</li>
+            <li><b>Words Written</b> — total words across all entries.</li>
+            <li><b>Total (incl. Baseline)</b> — your baseline plus all logged words.</li>
+        </ul>
+        <p>Use the <b>Edit</b> button to change the project name or baseline.
+        Use the <b>Delete</b> button to remove a project and all its entries.</p>
+        <p>Click <b>📊 View Statistics</b> or <b>📋 View History</b> for detailed views.
+        Use <b>← All Projects</b> to return to the home screen.</p>
+
+        <h2 style="color: #5B9BD5;">Statistics Page</h2>
+        <p>View writing statistics over different time periods (past week, month, or 6 months):</p>
+        <ul>
+            <li><b>Daily word count chart</b> — bar chart showing words written each day.</li>
+            <li><b>Average per day</b> — your daily average over the selected period.</li>
+            <li><b>Best day</b> — your highest word count day.</li>
+            <li><b>Streak</b> — current consecutive-day writing streak.</li>
+            <li><b>Recent entries</b> — list of your latest writing sessions.</li>
+        </ul>
+
+        <h2 style="color: #5B9BD5;">History Page</h2>
+        <p>View, edit, or delete individual entries:</p>
+        <ul>
+            <li>Click <b>Edit</b> to change the word count or note for an entry.</li>
+            <li>Click <b>Delete</b> to remove a single entry.</li>
+            <li>Click <b>🗑 Clear All Data</b> to remove all entries (the project itself is kept).</li>
+        </ul>
+
+        <h2 style="color: #5B9BD5;">Data &amp; Backup</h2>
+
+        <h3>Exporting Your Data</h3>
+        <ul>
+            <li><b>📥 Export JSON</b> — saves all projects and entries to a JSON file.
+                Use this to transfer data to another computer.</li>
+            <li><b>📥 Export CSV</b> — saves all entries to a CSV file that opens in Excel
+                or Google Sheets.</li>
+        </ul>
+
+        <h3>Importing Data</h3>
+        <ul>
+            <li><b>📤 Import JSON</b> — imports from a previously exported JSON file.</li>
+            <li><b>Merge mode</b> (recommended): adds new projects and entries, keeps existing data.
+                Duplicates are skipped automatically.</li>
+            <li><b>Replace mode</b>: wipes all current data and restores from the file.
+                Use this when moving to a new computer.</li>
+        </ul>
+
+        <h3>Custom Backup Location</h3>
+        <ul>
+            <li><b>📁 Backup Location</b> — choose a folder where automatic backups are saved.</li>
+            <li>Every time you add or edit an entry, a backup is written to this folder.</li>
+            <li>Great for cloud sync folders (Dropbox, Google Drive, OneDrive) — just select
+                the sync folder and your data is backed up automatically.</li>
+            <li>Works completely offline — the app just writes a file, your sync client
+                handles the upload.</li>
+        </ul>
+
+        <h3>Automatic Backups</h3>
+        <p>Word Counter also maintains automatic backups in its data directory.
+        Up to 10 timestamped backups are kept, plus a <code>latest_backup.json</code> file
+        that is always up to date.</p>
+
+        <h2 style="color: #5B9BD5;">Updates</h2>
+        <p>Word Counter checks for updates automatically on startup.
+        When a new version is available, you'll see a dialog with release notes
+        and an option to download and install the update automatically.</p>
+
+        <h2 style="color: #5B9BD5;">Tips</h2>
+        <ul>
+            <li>Write every day to build your streak! 🔥</li>
+            <li>Use notes to track which chapter or section you worked on.</li>
+            <li>Set a realistic baseline so your total reflects your actual progress.</li>
+            <li>Export your data regularly and keep a copy in a safe place.</li>
+        </ul>
+
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="color: #aaa; font-size: 11px;">
+            Word Counter by Adrian Mag ·
+            <a href="https://github.com/Adrian-Mag/word-counter">GitHub</a> ·
+            <a href="https://github.com/Adrian-Mag/word-counter/issues">Report an Issue</a>
+        </p>
+        """.format(version=get_current_version())
 
 
 class ProjectCard(QFrame):
@@ -385,11 +549,32 @@ class HomePage(QWidget):
         """)
         layout.addWidget(scroll, stretch=1)
 
-        # Version label
+        # Bottom bar: help button + version label
+        bottom_bar = QHBoxLayout()
+        bottom_bar.setContentsMargins(0, 0, 0, 0)
+
+        help_btn = QPushButton("❓ Help")
+        help_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ffffff;
+                color: #666;
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                padding: 4px 12px;
+                font-size: 11px;
+            }
+            QPushButton:hover { background-color: #f0f0f0; }
+        """)
+        help_btn.clicked.connect(self._on_show_help)
+        bottom_bar.addWidget(help_btn)
+
+        bottom_bar.addStretch()
+
         version_label = QLabel(f"v{get_current_version()}")
         version_label.setStyleSheet("color: #ccc; font-size: 10px; background: transparent;")
         version_label.setAlignment(Qt.AlignRight)
-        layout.addWidget(version_label)
+        bottom_bar.addWidget(version_label)
+        layout.addLayout(bottom_bar)
 
     def on_show(self):
         """Called when this page is switched to."""
@@ -419,6 +604,10 @@ class HomePage(QWidget):
     def _open_project(self, project: dict):
         if self.on_open_project:
             self.on_open_project(project)
+
+    def _on_show_help(self):
+        dialog = UserManualDialog(self)
+        dialog.show()
 
     def _on_export_json(self):
         path, _ = QFileDialog.getSaveFileName(
