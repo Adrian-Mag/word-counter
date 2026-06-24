@@ -480,17 +480,17 @@ class HomePage(QWidget):
 
         # New project button
         new_btn = QPushButton("+ New Project")
-        new_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #5B9BD5;
+        new_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {t['accent']};
                 color: white;
                 border: none;
                 border-radius: 8px;
                 padding: 12px 24px;
                 font-size: 14px;
                 font-weight: bold;
-            }
-            QPushButton:hover { background-color: #4A8AC5; }
+            }}
+            QPushButton:hover {{ background-color: {t['accent_hover']}; }}
         """)
         new_btn.clicked.connect(lambda: self.on_new_project() if self.on_new_project else None)
         layout.addWidget(new_btn)
@@ -500,61 +500,61 @@ class HomePage(QWidget):
         tools_row.setSpacing(8)
 
         export_json_btn = QPushButton("📥 Export JSON")
-        export_json_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #ffffff;
-                color: #666;
-                border: 1px solid #ddd;
+        export_json_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {t['btn_outline_bg']};
+                color: {t['text_secondary']};
+                border: 1px solid {t['border_light']};
                 border-radius: 6px;
                 padding: 6px 14px;
                 font-size: 11px;
-            }
-            QPushButton:hover { background-color: #f0f0f0; }
+            }}
+            QPushButton:hover {{ background-color: {t['btn_bg_hover']}; }}
         """)
         export_json_btn.clicked.connect(self._on_export_json)
         tools_row.addWidget(export_json_btn)
 
         export_csv_btn = QPushButton("📥 Export CSV")
-        export_csv_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #ffffff;
-                color: #666;
-                border: 1px solid #ddd;
+        export_csv_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {t['btn_outline_bg']};
+                color: {t['text_secondary']};
+                border: 1px solid {t['border_light']};
                 border-radius: 6px;
                 padding: 6px 14px;
                 font-size: 11px;
-            }
-            QPushButton:hover { background-color: #f0f0f0; }
+            }}
+            QPushButton:hover {{ background-color: {t['btn_bg_hover']}; }}
         """)
         export_csv_btn.clicked.connect(self._on_export_csv)
         tools_row.addWidget(export_csv_btn)
 
         import_btn = QPushButton("📤 Import JSON")
-        import_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #ffffff;
-                color: #5B9BD5;
-                border: 1px solid #5B9BD5;
+        import_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {t['btn_outline_bg']};
+                color: {t['accent']};
+                border: 1px solid {t['accent']};
                 border-radius: 6px;
                 padding: 6px 14px;
                 font-size: 11px;
-            }
-            QPushButton:hover { background-color: #5B9BD510; }
+            }}
+            QPushButton:hover {{ background-color: {t['accent']}10; }}
         """)
         import_btn.clicked.connect(self._on_import_json)
         tools_row.addWidget(import_btn)
 
         backup_btn = QPushButton("📁 Backup Location")
-        backup_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #ffffff;
-                color: #666;
-                border: 1px solid #ddd;
+        backup_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {t['btn_outline_bg']};
+                color: {t['text_secondary']};
+                border: 1px solid {t['border_light']};
                 border-radius: 6px;
                 padding: 6px 14px;
                 font-size: 11px;
-            }
-            QPushButton:hover { background-color: #f0f0f0; }
+            }}
+            QPushButton:hover {{ background-color: {t['btn_bg_hover']}; }}
         """)
         backup_btn.clicked.connect(self._on_set_backup_location)
         tools_row.addWidget(backup_btn)
@@ -572,9 +572,9 @@ class HomePage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(self.projects_container)
-        scroll.setStyleSheet("""
-            QScrollArea { border: none; }
-            QScrollBar:vertical { width: 8px; }
+        scroll.setStyleSheet(f"""
+            QScrollArea {{ border: none; background: transparent; }}
+            QScrollBar:vertical {{ width: 8px; }}
         """)
         layout.addWidget(scroll, stretch=1)
 
@@ -626,6 +626,7 @@ class HomePage(QWidget):
 
     def refresh_projects(self):
         """Rebuild the project cards."""
+        t = get_theme(self.dark)
         # Clear existing cards (keep the stretch)
         while self.projects_layout.count() > 1:
             item = self.projects_layout.takeAt(0)
@@ -636,7 +637,7 @@ class HomePage(QWidget):
 
         if not projects:
             empty_label = QLabel("No projects yet.\nClick '+ New Project' to get started! 🚀")
-            empty_label.setStyleSheet("color: #ccc; font-size: 16px; padding: 40px; background: transparent;")
+            empty_label.setStyleSheet(f"color: {t['text_disabled']}; font-size: 16px; padding: 40px; background: transparent;")
             empty_label.setAlignment(Qt.AlignCenter)
             self.projects_layout.insertWidget(0, empty_label)
             return
@@ -780,19 +781,14 @@ class MainWindow(QMainWindow):
         settings["dark_mode"] = self.dark
         save_settings(settings)
         self._apply_theme()
-        # Rebuild home page with new theme
-        self.home_page = HomePage(
-            self.db,
-            on_open_project=self._open_project,
-            on_new_project=self._on_new_project,
-            dark=self.dark,
-            on_toggle_theme=self._toggle_theme,
-        )
-        self.stack.removeWidget(self.stack.widget(self.PAGE_HOME))
-        self.stack.insertWidget(self.PAGE_HOME, self.home_page)
+        # Update existing home page theme
+        self.home_page.dark = self.dark
+        t = get_theme(self.dark)
+        self.home_page.setStyleSheet(f"background-color: {t['bg']};")
         self.home_page.refresh_projects()
-        if self.stack.currentIndex() == self.PAGE_HOME:
-            self.stack.setCurrentIndex(self.PAGE_HOME)
+        # Update project page if it exists
+        if self.project_page:
+            self._rebuild_project_page()
 
     def _setup_shortcuts(self):
         from PyQt5.QtGui import QKeySequence
@@ -883,6 +879,28 @@ class MainWindow(QMainWindow):
             widget.on_show()
         self.stack.setCurrentIndex(index)
 
+    def _rebuild_project_page(self):
+        """Recreate the current project page with updated theme."""
+        if self.current_project_id is None:
+            return
+        project = self.db.get_project(self.current_project_id)
+        if not project:
+            return
+        if self.project_page:
+            self.stack.removeWidget(self.project_page)
+            self.project_page.deleteLater()
+        self.project_page = ProjectPage(
+            self.db,
+            self.current_project_id,
+            on_back=self._go_home,
+            on_stats=self._go_stats,
+            on_history=self._go_history,
+            on_project_deleted=self._on_project_deleted,
+            dark=self.dark,
+        )
+        self.stack.insertWidget(self.PAGE_PROJECT, self.project_page)
+        self.stack.removeWidget(self.stack.widget(self.PAGE_PROJECT + 1))
+
     def _open_project(self, project: dict):
         self.current_project_id = project["id"]
 
@@ -937,6 +955,7 @@ class MainWindow(QMainWindow):
             self.current_project_id,
             on_back=lambda: self._switch_to_page(self.PAGE_PROJECT),
             on_data_changed=lambda: self.project_page.refresh_summary() if self.project_page else None,
+            dark=self.dark,
         )
         self.stack.insertWidget(self.PAGE_HISTORY, self.history_page)
         self.stack.removeWidget(self.stack.widget(self.PAGE_HISTORY + 1))

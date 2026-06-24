@@ -189,6 +189,7 @@ class ProjectPage(QWidget):
         self._build_ui()
 
     def _build_ui(self):
+        t = get_theme(self.dark)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
@@ -196,47 +197,47 @@ class ProjectPage(QWidget):
         # Top bar: back button + edit/delete
         top_bar = QHBoxLayout()
         back_btn = QPushButton("← All Projects")
-        back_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #f0f0f0;
-                color: #666;
+        back_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {t['btn_bg']};
+                color: {t['text_secondary']};
                 border: none;
                 border-radius: 6px;
                 padding: 6px 14px;
                 font-size: 12px;
-            }
-            QPushButton:hover { background-color: #e0e0e0; }
+            }}
+            QPushButton:hover {{ background-color: {t['btn_bg_hover']}; }}
         """)
         back_btn.clicked.connect(self._go_back)
         top_bar.addWidget(back_btn)
         top_bar.addStretch()
 
         edit_btn = QPushButton("✏️ Edit Project")
-        edit_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #ffffff;
-                color: #5B9BD5;
-                border: 1px solid #5B9BD5;
+        edit_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {t['btn_outline_bg']};
+                color: {t['accent']};
+                border: 1px solid {t['accent']};
                 border-radius: 6px;
                 padding: 6px 14px;
                 font-size: 11px;
-            }
-            QPushButton:hover { background-color: #5B9BD510; }
+            }}
+            QPushButton:hover {{ background-color: {t['accent']}10; }}
         """)
         edit_btn.clicked.connect(self._on_edit_project)
         top_bar.addWidget(edit_btn)
 
         delete_btn = QPushButton("🗑 Delete Project")
-        delete_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #ffffff;
-                color: #e74c3c;
-                border: 1px solid #e74c3c;
+        delete_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {t['btn_outline_bg']};
+                color: {t['danger']};
+                border: 1px solid {t['danger']};
                 border-radius: 6px;
                 padding: 6px 14px;
                 font-size: 11px;
-            }
-            QPushButton:hover { background-color: #e74c3c10; }
+            }}
+            QPushButton:hover {{ background-color: {t['danger']}10; }}
         """)
         delete_btn.clicked.connect(self._on_delete_project)
         top_bar.addWidget(delete_btn)
@@ -244,63 +245,65 @@ class ProjectPage(QWidget):
 
         # Title
         self.title_label = QLabel(f"✍️ {self.project_name}")
-        self.title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50; background: transparent;")
+        self.title_label.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {t['text']}; background: transparent;")
         layout.addWidget(self.title_label)
 
         # Input section
         input_frame = QFrame()
-        input_frame.setStyleSheet("""
-            QFrame {
-                background-color: #f8f9fa;
-                border: 1px solid #e0e0e0;
+        input_frame.setStyleSheet(f"""
+            QFrame {{
+                background-color: {t['bg_alt']};
+                border: 1px solid {t['border']};
                 border-radius: 12px;
-            }
-            QLabel {
+            }}
+            QLabel {{
                 background: transparent;
-            }
+            }}
         """)
         input_layout = QVBoxLayout(input_frame)
         input_layout.setContentsMargins(20, 20, 20, 20)
         input_layout.setSpacing(10)
 
         input_label = QLabel("How many words did you write? (use negative for editing)")
-        input_label.setStyleSheet("font-size: 13px; color: #666; background: transparent;")
+        input_label.setStyleSheet(f"font-size: 13px; color: {t['text_secondary']}; background: transparent;")
         input_layout.addWidget(input_label)
 
         input_row = QHBoxLayout()
         self.word_input = QLineEdit()
         self.word_input.setPlaceholderText("Enter word count (e.g. 500 or -100 for editing)...")
-        self.word_input.setStyleSheet("""
-            QLineEdit {
+        self.word_input.setStyleSheet(f"""
+            QLineEdit {{
                 padding: 10px 14px;
-                border: 2px solid #ddd;
+                border: 2px solid {t['input_border']};
                 border-radius: 8px;
                 font-size: 16px;
-            }
-            QLineEdit:focus {
-                border-color: #5B9BD5;
-            }
+                background-color: {t['input_bg']};
+                color: {t['text_primary']};
+            }}
+            QLineEdit:focus {{
+                border-color: {t['input_border_focus']};
+            }}
         """)
         self.word_input.returnPressed.connect(self._on_add_entry)
         input_row.addWidget(self.word_input, stretch=1)
 
         add_btn = QPushButton("Log Words")
-        add_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #5B9BD5;
+        add_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {t['accent']};
                 color: white;
                 border: none;
                 border-radius: 8px;
                 padding: 10px 20px;
                 font-size: 14px;
                 font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #4A8AC5;
-            }
-            QPushButton:pressed {
-                background-color: #3A7AB5;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {t['accent_hover']};
+            }}
+            QPushButton:pressed {{
+                background-color: {t['accent_pressed']};
+            }}
         """)
         add_btn.clicked.connect(self._on_add_entry)
         input_row.addWidget(add_btn)
@@ -309,17 +312,18 @@ class ProjectPage(QWidget):
         # Optional note
         self.note_input = QLineEdit()
         self.note_input.setPlaceholderText("Optional note (e.g., 'Chapter 3 draft')...")
-        self.note_input.setStyleSheet("""
-            QLineEdit {
+        self.note_input.setStyleSheet(f"""
+            QLineEdit {{
                 padding: 8px 14px;
-                border: 1px solid #ddd;
+                border: 1px solid {t['input_border']};
                 border-radius: 6px;
                 font-size: 12px;
-                color: #888;
-            }
-            QLineEdit:focus {
-                border-color: #bbb;
-            }
+                color: {t['text_muted']};
+                background-color: {t['input_bg']};
+            }}
+            QLineEdit:focus {{
+                border-color: {t['border_light']};
+            }}
         """)
         self.note_input.returnPressed.connect(self._on_add_entry)
         input_layout.addWidget(self.note_input)
@@ -343,13 +347,13 @@ class ProjectPage(QWidget):
 
         # Last entry info
         self.last_entry_label = QLabel("")
-        self.last_entry_label.setStyleSheet("color: #999; font-size: 11px; background: transparent;")
+        self.last_entry_label.setStyleSheet(f"color: {t['text_muted']}; font-size: 11px; background: transparent;")
         self.last_entry_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.last_entry_label)
 
         # Recent additions summary
         self.recent_label = QLabel("")
-        self.recent_label.setStyleSheet("color: #aaa; font-size: 10px; background: transparent;")
+        self.recent_label.setStyleSheet(f"color: {t['text_faint']}; font-size: 10px; background: transparent;")
         self.recent_label.setAlignment(Qt.AlignCenter)
         self.recent_label.setWordWrap(True)
         layout.addWidget(self.recent_label)
@@ -358,45 +362,45 @@ class ProjectPage(QWidget):
 
         # Stats button
         stats_btn = QPushButton("📊 View Statistics")
-        stats_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #ffffff;
-                color: #5B9BD5;
-                border: 2px solid #5B9BD5;
+        stats_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {t['btn_outline_bg']};
+                color: {t['accent']};
+                border: 2px solid {t['accent']};
                 border-radius: 8px;
                 padding: 10px 20px;
                 font-size: 14px;
                 font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #5B9BD510;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {t['accent']}10;
+            }}
         """)
         stats_btn.clicked.connect(lambda: self.on_stats() if self.on_stats else None)
         layout.addWidget(stats_btn)
 
         # History button
         history_btn = QPushButton("📋 View History")
-        history_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #ffffff;
+        history_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {t['btn_outline_bg']};
                 color: #8E44AD;
                 border: 2px solid #8E44AD;
                 border-radius: 8px;
                 padding: 10px 20px;
                 font-size: 14px;
                 font-weight: bold;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background-color: #8E44AD10;
-            }
+            }}
         """)
         history_btn.clicked.connect(lambda: self.on_history() if self.on_history else None)
         layout.addWidget(history_btn)
 
         # Version label
         version_label = QLabel(f"v{get_current_version()}")
-        version_label.setStyleSheet("color: #ccc; font-size: 10px; background: transparent;")
+        version_label.setStyleSheet(f"color: {t['text_disabled']}; font-size: 10px; background: transparent;")
         version_label.setAlignment(Qt.AlignRight)
         layout.addWidget(version_label)
 

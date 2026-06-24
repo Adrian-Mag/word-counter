@@ -83,6 +83,7 @@ class StatsPage(QWidget):
         self._build_ui()
 
     def _build_ui(self):
+        t = get_theme(self.dark)
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(24, 24, 24, 24)
         main_layout.setSpacing(16)
@@ -90,16 +91,16 @@ class StatsPage(QWidget):
         # Top bar with back button
         top_bar = QHBoxLayout()
         back_btn = QPushButton("← Back to Project")
-        back_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #f0f0f0;
-                color: #666;
+        back_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {t['btn_bg']};
+                color: {t['text_secondary']};
                 border: none;
                 border-radius: 6px;
                 padding: 6px 14px;
                 font-size: 12px;
-            }
-            QPushButton:hover { background-color: #e0e0e0; }
+            }}
+            QPushButton:hover {{ background-color: {t['btn_bg_hover']}; }}
         """)
         back_btn.clicked.connect(self._go_back)
         top_bar.addWidget(back_btn)
@@ -109,25 +110,27 @@ class StatsPage(QWidget):
         # Header
         header_layout = QHBoxLayout()
         title = QLabel("📊 Writing Statistics")
-        title.setStyleSheet("font-size: 20px; font-weight: bold; color: #2c3e50; background: transparent;")
+        title.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {t['text']}; background: transparent;")
         header_layout.addWidget(title)
         header_layout.addStretch()
 
         period_label = QLabel("Period:")
-        period_label.setStyleSheet("font-size: 12px; color: #666; background: transparent;")
+        period_label.setStyleSheet(f"font-size: 12px; color: {t['text_secondary']}; background: transparent;")
         header_layout.addWidget(period_label)
 
         self.period_combo = QComboBox()
         for label, days in self.PERIOD_OPTIONS:
             self.period_combo.addItem(label, days)
         self.period_combo.currentIndexChanged.connect(self.refresh)
-        self.period_combo.setStyleSheet("""
-            QComboBox {
+        self.period_combo.setStyleSheet(f"""
+            QComboBox {{
                 padding: 4px 10px;
-                border: 1px solid #ccc;
+                border: 1px solid {t['input_border']};
                 border-radius: 6px;
                 font-size: 12px;
-            }
+                background-color: {t['input_bg']};
+                color: {t['text']};
+            }}
         """)
         header_layout.addWidget(self.period_combo)
         main_layout.addLayout(header_layout)
@@ -138,13 +141,13 @@ class StatsPage(QWidget):
         main_layout.addLayout(self.cards_layout)
 
         # Chart
-        self.figure = Figure(figsize=(7, 4), facecolor="white")
+        self.figure = Figure(figsize=(7, 4), facecolor=t['bg'])
         self.canvas = FigureCanvas(self.figure)
         main_layout.addWidget(self.canvas, stretch=1)
 
         # Recent entries list
         entries_label = QLabel("📝 Recent Entries")
-        entries_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #2c3e50; margin-top: 8px; background: transparent;")
+        entries_label.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {t['text']}; margin-top: 8px; background: transparent;")
         main_layout.addWidget(entries_label)
 
         self.entries_container = QWidget()
@@ -156,9 +159,9 @@ class StatsPage(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setWidget(self.entries_container)
         scroll.setMaximumHeight(150)
-        scroll.setStyleSheet("""
-            QScrollArea { border: 1px solid #e0e0e0; border-radius: 8px; }
-            QScrollBar:vertical { width: 8px; }
+        scroll.setStyleSheet(f"""
+            QScrollArea {{ border: 1px solid {t['border']}; border-radius: 8px; }}
+            QScrollBar:vertical {{ width: 8px; }}
         """)
         main_layout.addWidget(scroll)
 
@@ -205,6 +208,7 @@ class StatsPage(QWidget):
         self._populate_entries()
 
     def _draw_chart(self, daily_totals: list[dict], days: int):
+        t = get_theme(self.dark)
         self.figure.clear()
         ax = self.figure.add_subplot(111)
 
@@ -225,18 +229,18 @@ class StatsPage(QWidget):
                 else:
                     labels.append("")
 
-        colors = ["#5B9BD5" if t > 0 else "#E8E8E8" for t in totals]
+        colors = [t['accent'] if total > 0 else t['border'] for total in totals]
         ax.bar(range(len(dates)), totals, color=colors, edgecolor="none", width=0.7)
         ax.set_xticks(range(len(dates)))
         ax.set_xticklabels(labels, fontsize=7, rotation=0 if days <= 30 else 0)
 
-        ax.set_ylabel("Words Written", fontsize=9, color="#666")
-        ax.set_title(f"Daily Word Count — Last {days} Days", fontsize=12, color="#2c3e50", pad=12)
+        ax.set_ylabel("Words Written", fontsize=9, color=t['text_secondary'])
+        ax.set_title(f"Daily Word Count — Last {days} Days", fontsize=12, color=t['text'], pad=12)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
-        ax.spines["left"].set_color("#ddd")
-        ax.spines["bottom"].set_color("#ddd")
-        ax.tick_params(colors="#999", labelsize=8)
+        ax.spines["left"].set_color(t['border'])
+        ax.spines["bottom"].set_color(t['border'])
+        ax.tick_params(colors=t['text_muted'], labelsize=8)
         ax.yaxis.get_offset_text().set_fontsize(8)
 
         # Add average line
@@ -249,6 +253,7 @@ class StatsPage(QWidget):
         self.canvas.draw_idle()
 
     def _populate_entries(self):
+        t = get_theme(self.dark)
         # Clear old entries
         while self.entries_layout.count():
             item = self.entries_layout.takeAt(0)
@@ -268,23 +273,23 @@ class StatsPage(QWidget):
             words_str = f"{sign}{entry['word_count']:,} words"
 
             date_label = QLabel(date_str)
-            date_label.setStyleSheet("color: #666; font-size: 11px; background: transparent;")
+            date_label.setStyleSheet(f"color: {t['text_secondary']}; font-size: 11px; background: transparent;")
             row_layout.addWidget(date_label)
             row_layout.addStretch()
 
             words_label = QLabel(words_str)
-            words_label.setStyleSheet("color: #5B9BD5; font-size: 12px; font-weight: bold; background: transparent;")
+            words_label.setStyleSheet(f"color: {t['accent']}; font-size: 12px; font-weight: bold; background: transparent;")
             row_layout.addWidget(words_label)
 
             if entry.get("note"):
                 note_label = QLabel(f"  ({entry['note']})")
-                note_label.setStyleSheet("color: #aaa; font-size: 10px; font-style: italic; background: transparent;")
+                note_label.setStyleSheet(f"color: {t['text_muted']}; font-size: 10px; font-style: italic; background: transparent;")
                 row_layout.addWidget(note_label)
 
             self.entries_layout.addWidget(row)
 
         if not entries:
             no_entries = QLabel("No entries yet. Start writing! ✍️")
-            no_entries.setStyleSheet("color: #aaa; font-size: 12px; padding: 20px; background: transparent;")
+            no_entries.setStyleSheet(f"color: {t['text_muted']}; font-size: 12px; padding: 20px; background: transparent;")
             no_entries.setAlignment(Qt.AlignCenter)
             self.entries_layout.addWidget(no_entries)

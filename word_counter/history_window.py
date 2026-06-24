@@ -22,16 +22,18 @@ from PyQt5.QtWidgets import (
 )
 
 from .database import Database
+from .theme import get_theme
 
 
 class EditEntryDialog(QDialog):
     """Dialog for editing an existing entry."""
 
-    def __init__(self, entry: dict, parent=None):
+    def __init__(self, entry: dict, parent=None, dark: bool = False):
         super().__init__(parent)
         self.setWindowTitle("Edit Entry")
         self.setMinimumWidth(350)
-        self.setStyleSheet("background-color: #ffffff;")
+        t = get_theme(dark)
+        self.setStyleSheet(f"background-color: {t['bg']};")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -39,55 +41,60 @@ class EditEntryDialog(QDialog):
 
         ts = datetime.fromisoformat(entry["timestamp"])
         date_label = QLabel(f"📅 {ts.strftime('%B %d, %Y at %I:%M %p')}")
-        date_label.setStyleSheet("color: #666; font-size: 12px;")
+        date_label.setStyleSheet(f"color: {t['text_secondary']}; font-size: 12px;")
         layout.addWidget(date_label)
 
         layout.addWidget(QLabel("Word count:"))
         self.words_input = QLineEdit(str(entry["word_count"]))
-        self.words_input.setStyleSheet("""
-            QLineEdit {
+        self.words_input.setStyleSheet(f"""
+            QLineEdit {{
                 padding: 8px 12px;
-                border: 2px solid #ddd;
+                border: 2px solid {t['input_border']};
                 border-radius: 6px;
                 font-size: 14px;
-            }
-            QLineEdit:focus { border-color: #5B9BD5; }
+                background-color: {t['input_bg']};
+                color: {t['text_primary']};
+            }}
+            QLineEdit:focus {{ border-color: {t['input_border_focus']}; }}
         """)
         layout.addWidget(self.words_input)
 
         layout.addWidget(QLabel("Note:"))
         self.note_input = QLineEdit(entry.get("note", ""))
-        self.note_input.setStyleSheet("""
-            QLineEdit {
+        self.note_input.setStyleSheet(f"""
+            QLineEdit {{
                 padding: 8px 12px;
-                border: 1px solid #ddd;
+                border: 1px solid {t['input_border']};
                 border-radius: 6px;
                 font-size: 12px;
-            }
-            QLineEdit:focus { border-color: #bbb; }
+                background-color: {t['input_bg']};
+                color: {t['text']};
+            }}
+            QLineEdit:focus {{ border-color: {t['border_light']}; }}
         """)
         layout.addWidget(self.note_input)
 
         btn_row = QHBoxLayout()
         cancel_btn = QPushButton("Cancel")
-        cancel_btn.setStyleSheet("""
-            QPushButton {
-                padding: 8px 20px; border: 1px solid #ccc;
+        cancel_btn.setStyleSheet(f"""
+            QPushButton {{
+                padding: 8px 20px; border: 1px solid {t['border_light']};
                 border-radius: 6px; font-size: 12px;
-            }
-            QPushButton:hover { background-color: #f0f0f0; }
+                background-color: {t['btn_bg']}; color: {t['text_secondary']};
+            }}
+            QPushButton:hover {{ background-color: {t['btn_bg_hover']}; }}
         """)
         cancel_btn.clicked.connect(self.reject)
         btn_row.addWidget(cancel_btn)
 
         save_btn = QPushButton("Save Changes")
-        save_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #5B9BD5; color: white;
+        save_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {t['accent']}; color: white;
                 border: none; border-radius: 6px;
                 padding: 8px 20px; font-size: 12px; font-weight: bold;
-            }
-            QPushButton:hover { background-color: #4A8AC5; }
+            }}
+            QPushButton:hover {{ background-color: {t['accent_hover']}; }}
         """)
         save_btn.clicked.connect(self._on_save)
         btn_row.addWidget(save_btn)
@@ -111,17 +118,20 @@ class EditEntryDialog(QDialog):
 class HistoryPage(QWidget):
     """Page showing all entries with edit/delete/clear-all functionality."""
 
-    def __init__(self, db: Database, project_id: int, on_back=None, on_data_changed=None):
+    def __init__(self, db: Database, project_id: int, on_back=None, on_data_changed=None, dark: bool = False):
         super().__init__()
         self.db = db
         self.project_id = project_id
         self.on_back = on_back
         self.on_data_changed = on_data_changed
-        self.setStyleSheet("background-color: #ffffff;")
+        self.dark = dark
+        t = get_theme(dark)
+        self.setStyleSheet(f"background-color: {t['bg']};")
 
         self._build_ui()
 
     def _build_ui(self):
+        t = get_theme(self.dark)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
@@ -129,16 +139,16 @@ class HistoryPage(QWidget):
         # Top bar with back button
         top_bar = QHBoxLayout()
         back_btn = QPushButton("← Back to Project")
-        back_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #f0f0f0;
-                color: #666;
+        back_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {t['btn_bg']};
+                color: {t['text_secondary']};
                 border: none;
                 border-radius: 6px;
                 padding: 6px 14px;
                 font-size: 12px;
-            }
-            QPushButton:hover { background-color: #e0e0e0; }
+            }}
+            QPushButton:hover {{ background-color: {t['btn_bg_hover']}; }}
         """)
         back_btn.clicked.connect(self._go_back)
         top_bar.addWidget(back_btn)
@@ -148,12 +158,12 @@ class HistoryPage(QWidget):
         # Header
         header_row = QHBoxLayout()
         title = QLabel("📋 Entry History")
-        title.setStyleSheet("font-size: 20px; font-weight: bold; color: #2c3e50; background: transparent;")
+        title.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {t['text']}; background: transparent;")
         header_row.addWidget(title)
         header_row.addStretch()
 
         self.count_label = QLabel("")
-        self.count_label.setStyleSheet("color: #999; font-size: 12px; background: transparent;")
+        self.count_label.setStyleSheet(f"color: {t['text_muted']}; font-size: 12px; background: transparent;")
         header_row.addWidget(self.count_label)
         layout.addLayout(header_row)
 
@@ -166,26 +176,27 @@ class HistoryPage(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.table.setAlternatingRowColors(True)
-        self.table.setStyleSheet("""
-            QTableWidget {
-                border: 1px solid #e0e0e0;
+        self.table.setStyleSheet(f"""
+            QTableWidget {{
+                border: 1px solid {t['border']};
                 border-radius: 8px;
-                gridline-color: #f0f0f0;
-                alternate-background-color: #f8f9fa;
-                background-color: #ffffff;
-            }
-            QHeaderView::section {
-                background-color: #f0f4f8;
-                color: #666;
+                gridline-color: {t['border']};
+                alternate-background-color: {t['bg_alt']};
+                background-color: {t['bg']};
+                color: {t['text']};
+            }}
+            QHeaderView::section {{
+                background-color: {t['bg_alt']};
+                color: {t['text_secondary']};
                 font-weight: bold;
                 font-size: 11px;
                 padding: 8px;
                 border: none;
-                border-bottom: 1px solid #e0e0e0;
-            }
-            QTableWidget::item {
+                border-bottom: 1px solid {t['border']};
+            }}
+            QTableWidget::item {{
                 padding: 6px 8px;
-            }
+            }}
         """)
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionMode(QTableWidget.NoSelection)
@@ -198,19 +209,19 @@ class HistoryPage(QWidget):
         bottom_row.addStretch()
 
         clear_btn = QPushButton("🗑 Clear All Data")
-        clear_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #ffffff;
-                color: #e74c3c;
-                border: 2px solid #e74c3c;
+        clear_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {t['btn_outline_bg']};
+                color: {t['danger']};
+                border: 2px solid {t['danger']};
                 border-radius: 8px;
                 padding: 8px 20px;
                 font-size: 12px;
                 font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #e74c3c10;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {t['danger']}10;
+            }}
         """)
         clear_btn.clicked.connect(self._on_clear_all)
         bottom_row.addWidget(clear_btn)
@@ -226,6 +237,7 @@ class HistoryPage(QWidget):
 
     def refresh(self):
         """Rebuild the table from the database."""
+        t = get_theme(self.dark)
         entries = self.db.get_all_entries(self.project_id)
         entries = list(reversed(entries))  # most recent first
 
@@ -258,25 +270,25 @@ class HistoryPage(QWidget):
             actions_layout.setSpacing(6)
 
             edit_btn = QPushButton("Edit")
-            edit_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #5B9BD5; color: white;
+            edit_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {t['accent']}; color: white;
                     border: none; border-radius: 4px;
                     padding: 4px 12px; font-size: 11px;
-                }
-                QPushButton:hover { background-color: #4A8AC5; }
+                }}
+                QPushButton:hover {{ background-color: {t['accent_hover']}; }}
             """)
             edit_btn.clicked.connect(lambda _, e=entry: self._on_edit(e))
             actions_layout.addWidget(edit_btn)
 
             delete_btn = QPushButton("Delete")
-            delete_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #e74c3c; color: white;
+            delete_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {t['danger']}; color: white;
                     border: none; border-radius: 4px;
                     padding: 4px 12px; font-size: 11px;
-                }
-                QPushButton:hover { background-color: #c0392b; }
+                }}
+                QPushButton:hover {{ background-color: #c0392b; }}
             """)
             delete_btn.clicked.connect(lambda _, e=entry: self._on_delete(e))
             actions_layout.addWidget(delete_btn)
@@ -286,7 +298,7 @@ class HistoryPage(QWidget):
         self.table.resizeRowsToContents()
 
     def _on_edit(self, entry: dict):
-        dialog = EditEntryDialog(entry, self)
+        dialog = EditEntryDialog(entry, self, dark=self.dark)
         if dialog.exec_() == QDialog.Accepted:
             words, note = dialog.get_values()
             self.db.update_entry(entry["id"], words, note)
