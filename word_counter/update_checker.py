@@ -13,7 +13,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-CURRENT_VERSION = "1.3.0"
+CURRENT_VERSION = "1.3.1"
 GITHUB_API_URL = "https://api.github.com/repos/Adrian-Mag/word-counter/releases/latest"
 GITHUB_ALL_RELEASES_URL = "https://api.github.com/repos/Adrian-Mag/word-counter/releases"
 
@@ -162,35 +162,85 @@ def install_update(new_exe_path: Path):
     new_size = new_exe_path.stat().st_size
     current_pid = os.getpid()
 
-    # Create updater batch script with copy verification and proper process cleanup
+    # Determine log file path (app data dir)
+    if platform.system() == "Windows":
+        app_data = os.path.join(os.environ.get("APPDATA", ""), "WordCounter")
+    else:
+        app_data = os.path.join(os.path.expanduser("~"), ".local", "share", "WordCounter")
+    log_path = os.path.join(app_data, "update.log")
+
+    # Create updater batch script with full logging
     updater_script = f"""@echo off
 chcp 65001 >nul 2>nul
+set "LOG={log_path}"
+echo. >> "%LOG%"
+echo ============================================ >> "%LOG%"
+echo [%date% %time%] Update batch script started >> "%LOG%"
+echo   Old PID: {current_pid} >> "%LOG%"
+echo   Old exe: {current_exe} >> "%LOG%"
+echo   New exe: {new_exe_path} >> "%LOG%"
+echo   Expected size: {new_size} bytes >> "%LOG%"
+echo   Log file: %LOG% >> "%LOG%"
+echo ============================================ >> "%LOG%"
+
 :wait
-rem Wait for the app process to fully exit
+echo [%date% %time%] Step 1: Killing old process (pid {current_pid}) >> "%LOG%"
 taskkill /pid {current_pid} /f 2>nul
+echo [%date% %time%] Step 2: Waiting 2s for process to exit >> "%LOG%"
 timeout /t 2 /nobreak >nul
+echo [%date% %time%] Step 3: Attempting to delete old exe >> "%LOG%"
 del "{current_exe}" 2>nul
-if exist "{current_exe}" goto wait
-copy /y "{new_exe_path}" "{current_exe}"
-if not exist "{current_exe}" goto wait
+if exist "{current_exe}" (
+    echo [%date% %time%] WARNING: Old exe still exists, retrying >> "%LOG%"
+    goto wait
+)
+echo [%date% %time%] Step 3: Old exe deleted successfully >> "%LOG%"
+
+echo [%date% %time%] Step 4: Copying new exe >> "%LOG%"
+copy /y "{new_exe_path}" "{current_exe}" >> "%LOG%" 2>&1
+if not exist "{current_exe}" (
+    echo [%date% %time%] ERROR: Copy failed, exe does not exist >> "%LOG%"
+    goto wait
+)
+echo [%date% %time%] Step 4: Copy completed >> "%LOG%"
+
 :verify
 for %%A in ("{current_exe}") do set copied_size=%%~zA
+echo [%date% %time%] Step 5: Verifying size (got: %copied_size%, expected: {new_size}) >> "%LOG%"
 if not "%copied_size%"=="{new_size}" (
+    echo [%date% %time%] WARNING: Size mismatch, retrying copy >> "%LOG%"
     timeout /t 1 /nobreak >nul
-    copy /y "{new_exe_path}" "{current_exe}"
+    copy /y "{new_exe_path}" "{current_exe}" >> "%LOG%" 2>&1
     for %%A in ("{current_exe}") do set copied_size=%%~zA
     if not "%copied_size%"=="{new_size}" goto verify
 )
-rem Wait for DLLs and file handles to be fully released by OS
+echo [%date% %time%] Step 5: Size verification passed >> "%LOG%"
+
+echo [%date% %time%] Step 6: Waiting 5s for DLLs/handles to release >> "%LOG%"
 timeout /t 5 /nobreak >nul
+echo [%date% %time%] Step 6: Wait complete >> "%LOG%"
+
+echo [%date% %time%] Step 7: Launching new exe >> "%LOG%"
 start "" "{current_exe}"
+echo [%date% %time%] Step 7: Launch command sent >> "%LOG%"
+
+echo [%date% %time%] Step 8: Waiting 3s before cleanup >> "%LOG%"
 timeout /t 3 /nobreak >nul
+echo [%date% %time%] Step 8: Deleting batch script >> "%LOG%"
 del "%~f0"
 """
 
     updater_path = Path(tempfile.gettempdir()) / "wordcounter_updater.bat"
     with open(updater_path, "w", encoding="utf-8") as f:
         f.write(updater_script)
+
+    # Log that we're about to launch the updater
+    try:
+        import logging
+        logger = logging.getLogger("word_counter")
+        logger.info(f"Update: launching batch updater. PID={current_pid}, exe={current_exe}, new_size={new_size}, log={log_path}")
+    except Exception:
+        pass
 
     # Launch the updater and exit
     if platform.system() == "Windows":

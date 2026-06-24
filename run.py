@@ -26,7 +26,12 @@ def setup_logging():
         ],
     )
     logger = logging.getLogger("word_counter")
-    logger.info("Application starting (PyInstaller mode)")
+    logger.info(f"Application starting (PyInstaller mode)")
+    logger.info(f"  PID: {os.getpid()}")
+    logger.info(f"  Executable: {sys.executable}")
+    logger.info(f"  Frozen: {getattr(sys, 'frozen', False)}")
+    logger.info(f"  App data dir: {get_app_data_dir()}")
+    logger.info(f"  Python: {sys.version}")
 
 
 def install_crash_handler(app: QApplication):
