@@ -67,7 +67,10 @@ def _is_process_alive(pid: int) -> bool:
         PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
         handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
         if handle:
-            kernel32.CloseHandle(handle)
+            try:
+                kernel32.CloseHandle(handle)
+            except OSError:
+                pass
             return True
         return False
     else:

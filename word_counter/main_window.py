@@ -17,11 +17,13 @@ from PyQt5.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressDialog,
     QPushButton,
     QScrollArea,
     QStackedWidget,
+    QSystemTrayIcon,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
@@ -814,7 +816,6 @@ class MainWindow(QMainWindow):
             self._go_home()
 
     def _setup_tray(self):
-        from PyQt5.QtWidgets import QSystemTrayIcon, QMenu
         self.tray = QSystemTrayIcon(create_app_icon(), self)
         self.tray.setToolTip("Word Counter ✍️")
         menu = QMenu()
