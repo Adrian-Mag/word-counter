@@ -823,7 +823,7 @@ class MainWindow(QMainWindow):
         show_action.triggered.connect(self._show_from_tray)
         menu.addSeparator()
         quit_action = menu.addAction("Quit")
-        quit_action.triggered.connect(self.close)
+        quit_action.triggered.connect(self._quit_from_tray)
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(self._on_tray_activated)
         self.tray.show()
@@ -837,12 +837,18 @@ class MainWindow(QMainWindow):
         if reason == QSystemTrayIcon.DoubleClick:
             self._show_from_tray()
 
+    def _quit_from_tray(self):
+        """Actually quit the app from the tray menu."""
+        self._force_quit = True
+        self.close()
+
     def closeEvent(self, event):
-        if hasattr(self, 'tray') and self.tray.isVisible():
+        if hasattr(self, 'tray') and self.tray.isVisible() and not getattr(self, '_force_quit', False):
             self.hide()
-            self.tray.showMessage("Word Counter", "App minimized to tray. Double-click to restore.", QSystemTrayIcon.Information, 2000)
+            self.tray.showMessage("Word Counter", "Minimized to tray. Double-click to restore or right-click → Quit to exit.", QSystemTrayIcon.Information, 3000)
             event.ignore()
         else:
+            self.tray.hide()
             event.accept()
 
     def _build_ui(self):
