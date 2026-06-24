@@ -13,7 +13,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-CURRENT_VERSION = "1.3.2"
+CURRENT_VERSION = "1.3.3"
 GITHUB_API_URL = "https://api.github.com/repos/Adrian-Mag/word-counter/releases/latest"
 GITHUB_ALL_RELEASES_URL = "https://api.github.com/repos/Adrian-Mag/word-counter/releases"
 
@@ -169,50 +169,58 @@ def install_update(new_exe_path: Path):
         app_data = os.path.join(os.path.expanduser("~"), ".local", "share", "WordCounter")
     log_path = os.path.join(app_data, "update.log")
 
-    # Create updater batch script with full logging
+    # Create updater batch script with full logging and launch retry
+    exe_name = current_exe.name
     updater_script = f"""@echo off
 chcp 65001 >nul 2>nul
 set "LOG={log_path}"
+set "EXE={current_exe}"
+set "EXE_NAME={exe_name}"
+set "NEW_EXE={new_exe_path}"
+set "EXPECTED_SIZE={new_size}"
+set "OLD_PID={current_pid}"
+
 echo. >> "%LOG%"
 echo ============================================ >> "%LOG%"
 echo [%date% %time%] Update batch script started >> "%LOG%"
-echo   Old PID: {current_pid} >> "%LOG%"
-echo   Old exe: {current_exe} >> "%LOG%"
-echo   New exe: {new_exe_path} >> "%LOG%"
-echo   Expected size: {new_size} bytes >> "%LOG%"
+echo   Old PID: %OLD_PID% >> "%LOG%"
+echo   Old exe: %EXE% >> "%LOG%"
+echo   New exe: %NEW_EXE% >> "%LOG%"
+echo   Expected size: %EXPECTED_SIZE% bytes >> "%LOG%"
 echo   Log file: %LOG% >> "%LOG%"
 echo ============================================ >> "%LOG%"
 
 :wait
-echo [%date% %time%] Step 1: Killing old process (pid {current_pid}) >> "%LOG%"
-taskkill /pid {current_pid} /f 2>nul
-echo [%date% %time%] Step 2: Waiting 2s for process to exit >> "%LOG%"
-timeout /t 2 /nobreak >nul
+echo [%date% %time%] Step 1: Killing all WordCounter processes >> "%LOG%"
+taskkill /im "%EXE_NAME%" /f 2>nul
+taskkill /pid %OLD_PID% /f 2>nul
+echo [%date% %time%] Step 2: Waiting 3s for processes to fully exit >> "%LOG%"
+timeout /t 3 /nobreak >nul
 echo [%date% %time%] Step 3: Attempting to delete old exe >> "%LOG%"
-del "{current_exe}" 2>nul
-if exist "{current_exe}" (
+del "%EXE%" 2>nul
+if exist "%EXE%" (
     echo [%date% %time%] WARNING: Old exe still exists, retrying >> "%LOG%"
     goto wait
 )
 echo [%date% %time%] Step 3: Old exe deleted successfully >> "%LOG%"
 
 echo [%date% %time%] Step 4: Copying new exe >> "%LOG%"
-copy /y "{new_exe_path}" "{current_exe}" >> "%LOG%" 2>&1
-if not exist "{current_exe}" (
+copy /y "%NEW_EXE%" "%EXE%" >> "%LOG%" 2>&1
+if not exist "%EXE%" (
     echo [%date% %time%] ERROR: Copy failed, exe does not exist >> "%LOG%"
     goto wait
 )
 echo [%date% %time%] Step 4: Copy completed >> "%LOG%"
 
 :verify
-for %%A in ("{current_exe}") do set copied_size=%%~zA
-echo [%date% %time%] Step 5: Verifying size (got: %copied_size%, expected: {new_size}) >> "%LOG%"
-if not "%copied_size%"=="{new_size}" (
+for %%A in ("%EXE%") do set copied_size=%%~zA
+echo [%date% %time%] Step 5: Verifying size (got: %copied_size%, expected: %EXPECTED_SIZE%) >> "%LOG%"
+if not "%copied_size%"=="%EXPECTED_SIZE%" (
     echo [%date% %time%] WARNING: Size mismatch, retrying copy >> "%LOG%"
     timeout /t 1 /nobreak >nul
-    copy /y "{new_exe_path}" "{current_exe}" >> "%LOG%" 2>&1
-    for %%A in ("{current_exe}") do set copied_size=%%~zA
-    if not "%copied_size%"=="{new_size}" goto verify
+    copy /y "%NEW_EXE%" "%EXE%" >> "%LOG%" 2>&1
+    for %%A in ("%EXE%") do set copied_size=%%~zA
+    if not "%copied_size%"=="%EXPECTED_SIZE%" goto verify
 )
 echo [%date% %time%] Step 5: Size verification passed >> "%LOG%"
 
@@ -220,13 +228,44 @@ echo [%date% %time%] Step 6: Waiting 5s for DLLs/handles to release >> "%LOG%"
 timeout /t 5 /nobreak >nul
 echo [%date% %time%] Step 6: Wait complete >> "%LOG%"
 
-echo [%date% %time%] Step 7: Launching new exe >> "%LOG%"
-start "" "{current_exe}"
-echo [%date% %time%] Step 7: Launch command sent >> "%LOG%"
+echo [%date% %time%] Step 7: Launching new exe (attempt 1) >> "%LOG%"
+start "" "%EXE%"
+timeout /t 5 /nobreak >nul
 
-echo [%date% %time%] Step 8: Waiting 3s before cleanup >> "%LOG%"
-timeout /t 3 /nobreak >nul
+rem Check if the app started by looking for the lock file
+if exist "{app_data}\\wordcounter.lock" (
+    echo [%date% %time%] Step 7: App started successfully (lock file found) >> "%LOG%"
+    goto cleanup
+)
+
+echo [%date% %time%] Step 7: App may not have started, waiting 5s and retrying (attempt 2) >> "%LOG%"
+timeout /t 5 /nobreak >nul
+start "" "%EXE%"
+timeout /t 5 /nobreak >nul
+
+if exist "{app_data}\\wordcounter.lock" (
+    echo [%date% %time%] Step 7: App started successfully on attempt 2 >> "%LOG%"
+    goto cleanup
+)
+
+echo [%date% %time%] Step 7: App may not have started, waiting 10s and retrying (attempt 3) >> "%LOG%"
+timeout /t 10 /nobreak >nul
+echo [%date% %time%] Step 7: Final launch attempt >> "%LOG%"
+start "" "%EXE%"
+timeout /t 5 /nobreak >nul
+
+if exist "{app_data}\\wordcounter.lock" (
+    echo [%date% %time%] Step 7: App started successfully on attempt 3 >> "%LOG%"
+) else (
+    echo [%date% %time%] Step 7: WARNING - App may not have started after 3 attempts >> "%LOG%"
+    echo [%date% %time%]   Please launch WordCounter manually from: %EXE% >> "%LOG%"
+)
+
+:cleanup
+echo [%date% %time%] Step 8: Cleaning up temp file >> "%LOG%"
+del "%NEW_EXE%" 2>nul
 echo [%date% %time%] Step 8: Deleting batch script >> "%LOG%"
+echo ============================================ >> "%LOG%"
 del "%~f0"
 """
 
