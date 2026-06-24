@@ -13,7 +13,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-CURRENT_VERSION = "1.4.0"
+CURRENT_VERSION = "1.4.1"
 GITHUB_API_URL = "https://api.github.com/repos/Adrian-Mag/word-counter/releases/latest"
 GITHUB_ALL_RELEASES_URL = "https://api.github.com/repos/Adrian-Mag/word-counter/releases"
 
@@ -226,6 +226,13 @@ echo [%date% %time%] Step 6: Waiting 5s for DLLs/handles to release >> "%LOG%"
 timeout /t 5 /nobreak >nul
 echo [%date% %time%] Step 6: Wait complete >> "%LOG%"
 
+echo [%date% %time%] Step 6b: Cleaning up stale PyInstaller _MEI temp folders >> "%LOG%"
+for /d %%D in ("%TEMP%\\_MEI*") do (
+    echo [%date% %time%]   Removing stale: %%D >> "%LOG%"
+    rmdir /s /q "%%D" 2>nul
+)
+echo [%date% %time%] Step 6b: _MEI cleanup done >> "%LOG%"
+
 echo [%date% %time%] Step 7: Launching new exe (attempt 1) >> "%LOG%"
 start "" "%EXE%"
 timeout /t 5 /nobreak >nul
@@ -279,7 +286,8 @@ del "%~f0"
     except Exception:
         pass
 
-    # Launch the updater and exit
+    # Launch the updater and exit immediately
+    # Use os._exit instead of sys.exit to bypass Qt event loop and tray icon closeEvent
     if platform.system() == "Windows":
         subprocess.Popen(
             ["cmd", "/c", str(updater_path)],
@@ -289,4 +297,4 @@ del "%~f0"
         # Non-Windows: just copy
         shutil.copy2(new_exe_path, current_exe)
 
-    sys.exit(0)
+    os._exit(0)
