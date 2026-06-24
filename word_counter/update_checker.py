@@ -13,7 +13,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-CURRENT_VERSION = "1.3.3"
+CURRENT_VERSION = "1.3.4"
 GITHUB_API_URL = "https://api.github.com/repos/Adrian-Mag/word-counter/releases/latest"
 GITHUB_ALL_RELEASES_URL = "https://api.github.com/repos/Adrian-Mag/word-counter/releases"
 
@@ -170,20 +170,16 @@ def install_update(new_exe_path: Path):
     log_path = os.path.join(app_data, "update.log")
 
     # Create updater batch script with full logging and launch retry
-    exe_name = current_exe.name
     updater_script = f"""@echo off
 chcp 65001 >nul 2>nul
 set "LOG={log_path}"
 set "EXE={current_exe}"
-set "EXE_NAME={exe_name}"
 set "NEW_EXE={new_exe_path}"
 set "EXPECTED_SIZE={new_size}"
-set "OLD_PID={current_pid}"
 
 echo. >> "%LOG%"
 echo ============================================ >> "%LOG%"
 echo [%date% %time%] Update batch script started >> "%LOG%"
-echo   Old PID: %OLD_PID% >> "%LOG%"
 echo   Old exe: %EXE% >> "%LOG%"
 echo   New exe: %NEW_EXE% >> "%LOG%"
 echo   Expected size: %EXPECTED_SIZE% bytes >> "%LOG%"
@@ -191,18 +187,20 @@ echo   Log file: %LOG% >> "%LOG%"
 echo ============================================ >> "%LOG%"
 
 :wait
-echo [%date% %time%] Step 1: Killing all WordCounter processes >> "%LOG%"
-taskkill /im "%EXE_NAME%" /f 2>nul
-taskkill /pid %OLD_PID% /f 2>nul
-echo [%date% %time%] Step 2: Waiting 3s for processes to fully exit >> "%LOG%"
+echo [%date% %time%] Step 1: Waiting for app to exit naturally (sys.exit was called) >> "%LOG%"
 timeout /t 3 /nobreak >nul
-echo [%date% %time%] Step 3: Attempting to delete old exe >> "%LOG%"
+echo [%date% %time%] Step 2: Attempting to delete old exe >> "%LOG%"
 del "%EXE%" 2>nul
 if exist "%EXE%" (
-    echo [%date% %time%] WARNING: Old exe still exists, retrying >> "%LOG%"
+    echo [%date% %time%] Old exe still locked, waiting for PyInstaller cleanup >> "%LOG%"
+    timeout /t 2 /nobreak >nul
+    del "%EXE%" 2>nul
+)
+if exist "%EXE%" (
+    echo [%date% %time%] Old exe still locked, retrying >> "%LOG%"
     goto wait
 )
-echo [%date% %time%] Step 3: Old exe deleted successfully >> "%LOG%"
+echo [%date% %time%] Step 2: Old exe deleted successfully >> "%LOG%"
 
 echo [%date% %time%] Step 4: Copying new exe >> "%LOG%"
 copy /y "%NEW_EXE%" "%EXE%" >> "%LOG%" 2>&1
