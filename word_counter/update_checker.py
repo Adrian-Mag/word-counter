@@ -13,7 +13,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-CURRENT_VERSION = "1.4.4"
+CURRENT_VERSION = "1.4.5"
 GITHUB_API_URL = "https://api.github.com/repos/Adrian-Mag/word-counter/releases/latest"
 GITHUB_ALL_RELEASES_URL = "https://api.github.com/repos/Adrian-Mag/word-counter/releases"
 
@@ -296,5 +296,13 @@ del "%~f0"
     else:
         # Non-Windows: just copy
         shutil.copy2(new_exe_path, current_exe)
+
+    # Clean up the lock file before exiting, since os._exit bypasses finally blocks
+    try:
+        from .database import get_app_data_dir
+        lock_file = get_app_data_dir() / "wordcounter.lock"
+        lock_file.unlink(missing_ok=True)
+    except Exception:
+        pass
 
     os._exit(0)

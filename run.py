@@ -59,20 +59,38 @@ def install_crash_handler(app: QApplication):
 
 
 def _is_process_alive(pid: int) -> bool:
-    """Check if a process with the given PID is running. Cross-platform."""
+    """Check if a process with the given PID is running AND is WordCounter.
+
+    On Windows, PIDs are reused aggressively, so we also verify the
+    process executable name matches to avoid false positives.
+    """
     if os.name == "nt":
-        # On Windows, use ctypes to call OpenProcess
         import ctypes
+        from ctypes import wintypes
         kernel32 = ctypes.windll.kernel32
         PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
         handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
-        if handle:
+        if not handle:
+            return False
+        try:
+            # Check the executable name to confirm it's actually WordCounter
+            exe_buf = ctypes.create_unicode_buffer(260)
+            psapi = ctypes.windll.psapi
+            buf_len = wintypes.DWORD(260)
+            if psapi.QueryFullProcessImageNameW(handle, 0, exe_buf, ctypes.byref(buf_len)):
+                exe_name = exe_buf.value.lower()
+                is_wordcounter = "wordcounter" in exe_name
+            else:
+                # Couldn't query — be conservative and assume it's not ours
+                is_wordcounter = False
+            return is_wordcounter
+        except Exception:
+            return False
+        finally:
             try:
                 kernel32.CloseHandle(handle)
             except OSError:
                 pass
-            return True
-        return False
     else:
         # On Unix, use os.kill with signal 0
         try:
