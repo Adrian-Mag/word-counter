@@ -21,23 +21,19 @@ from PyQt5.QtWidgets import (
 )
 
 from .database import Database
+from .theme import get_theme, get_card_colors
 
 
 class StatsCard(QFrame):
     """A small card showing a single stat."""
 
-    COLOR_SCHEMES = {
-        "#5B9BD5": ("#E3F0FB", "#1A6FAA"),
-        "#E8743B": ("#FDEDE4", "#C25420"),
-        "#27AE60": ("#E2F5EA", "#1A8C46"),
-        "#8E44AD": ("#F0E4F5", "#7D2BA0"),
-        "#666666": ("#F0F0F0", "#444444"),
-    }
-
-    def __init__(self, title: str, value: str, subtitle: str = "", color: str = "#666666"):
+    def __init__(self, title: str, value: str, subtitle: str = "", color: str = "#666666", dark: bool = False):
         super().__init__()
         self.setFrameShape(QFrame.StyledPanel)
-        bg, text_color = self.COLOR_SCHEMES.get(color, ("#F0F0F0", "#444444"))
+        self.color = color
+        self.dark = dark
+        bg, text_color = get_card_colors(color, dark) if color != "#666666" else (get_theme(dark)['card_bg'], get_theme(dark)['text_secondary'])
+        t = get_theme(dark)
         self.setStyleSheet(f"""
             StatsCard {{
                 background-color: {bg};
@@ -52,17 +48,17 @@ class StatsCard(QFrame):
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(4)
 
-        title_label = QLabel(title)
-        title_label.setStyleSheet(f"color: {text_color}; font-size: 11px; font-weight: bold; background: transparent;")
-        layout.addWidget(title_label)
+        self.title_label = QLabel(title)
+        self.title_label.setStyleSheet(f"color: {text_color}; font-size: 11px; font-weight: bold; background: transparent;")
+        layout.addWidget(self.title_label)
 
-        value_label = QLabel(value)
-        value_label.setStyleSheet("color: #1a1a1a; font-size: 20px; font-weight: bold; background: transparent;")
-        layout.addWidget(value_label)
+        self.value_label = QLabel(value)
+        self.value_label.setStyleSheet(f"color: {t['text_primary']}; font-size: 20px; font-weight: bold; background: transparent;")
+        layout.addWidget(self.value_label)
 
         if subtitle:
             sub_label = QLabel(subtitle)
-            sub_label.setStyleSheet("color: #888; font-size: 10px; background: transparent;")
+            sub_label.setStyleSheet(f"color: {t['text_muted']}; font-size: 10px; background: transparent;")
             layout.addWidget(sub_label)
 
 
@@ -75,12 +71,14 @@ class StatsPage(QWidget):
         ("Past 6 Months", 180),
     ]
 
-    def __init__(self, db: Database, project_id: int, on_back=None):
+    def __init__(self, db: Database, project_id: int, on_back=None, dark: bool = False):
         super().__init__()
         self.db = db
         self.project_id = project_id
         self.on_back = on_back
-        self.setStyleSheet("background-color: #ffffff;")
+        self.dark = dark
+        t = get_theme(dark)
+        self.setStyleSheet(f"background-color: {t['bg']};")
 
         self._build_ui()
 
@@ -190,12 +188,12 @@ class StatsPage(QWidget):
         best_sub = best["date"] if best and best["total"] > 0 else ""
 
         cards = [
-            StatsCard("TOTAL (PERIOD)", f"{stats['total_words_period']:,}", f"Last {days} days", "#5B9BD5"),
-            StatsCard("AVG / DAY", avg_str, f"Over {days} days", "#27AE60"),
-            StatsCard("BEST DAY", best_str, best_sub, "#E8743B"),
-            StatsCard("STREAK", f"{stats['current_streak']} days", "Consecutive days", "#E8743B"),
-            StatsCard("WORDS WRITTEN", f"{stats['total_written']:,}", f"{stats['total_entries']} entries", "#27AE60"),
-            StatsCard("TOTAL (INCL. BASELINE)", f"{stats['total_with_baseline']:,}", f"Baseline: {stats['baseline']:,}", "#8E44AD"),
+            StatsCard("TOTAL (PERIOD)", f"{stats['total_words_period']:,}", f"Last {days} days", "#5B9BD5", self.dark),
+            StatsCard("AVG / DAY", avg_str, f"Over {days} days", "#27AE60", self.dark),
+            StatsCard("BEST DAY", best_str, best_sub, "#E8743B", self.dark),
+            StatsCard("STREAK", f"{stats['current_streak']} days", "Consecutive days", "#E8743B", self.dark),
+            StatsCard("WORDS WRITTEN", f"{stats['total_written']:,}", f"{stats['total_entries']} entries", "#27AE60", self.dark),
+            StatsCard("TOTAL (INCL. BASELINE)", f"{stats['total_with_baseline']:,}", f"Baseline: {stats['baseline']:,}", "#8E44AD", self.dark),
         ]
         for card in cards:
             self.cards_layout.addWidget(card)

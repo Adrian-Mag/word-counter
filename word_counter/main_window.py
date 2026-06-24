@@ -5,9 +5,10 @@ Single window with QStackedWidget for navigation between Home, Project, Stats, a
 
 from datetime import datetime
 
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QIcon, QPixmap
+from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QSize
+from PyQt5.QtGui import QIcon, QPixmap, QColor
 from PyQt5.QtWidgets import (
+    QApplication,
     QDialog,
     QFileDialog,
     QFrame,
@@ -30,6 +31,7 @@ from .database import Database, load_settings, save_settings
 from .history_window import HistoryPage
 from .project_window import ProjectPage
 from .stats_window import StatsPage
+from .theme import get_theme, get_stylesheet, get_card_colors
 from .update_checker import check_for_update, download_update, install_update, get_current_version
 
 
@@ -356,24 +358,26 @@ class UserManualDialog(QDialog):
 class ProjectCard(QFrame):
     """A clickable card showing a project summary."""
 
-    def __init__(self, project: dict, on_click=None, parent=None):
+    def __init__(self, project: dict, on_click=None, parent=None, dark: bool = False):
         super().__init__()
         self.project = project
         self.on_click = on_click
+        self.dark = dark
         self.setCursor(Qt.PointingHandCursor)
-        self.setStyleSheet("""
-            ProjectCard {
-                background-color: #f8f9fa;
-                border: 2px solid #e0e0e0;
+        t = get_theme(dark)
+        self.setStyleSheet(f"""
+            ProjectCard {{
+                background-color: {t['card_bg']};
+                border: 2px solid {t['border']};
                 border-radius: 12px;
-            }
-            ProjectCard:hover {
-                border-color: #5B9BD5;
-                background-color: #f0f4f8;
-            }
-            QLabel {
+            }}
+            ProjectCard:hover {{
+                border-color: {t['accent']};
+                background-color: {t['bg_hover']};
+            }}
+            QLabel {{
                 background: transparent;
-            }
+            }}
         """)
 
         layout = QVBoxLayout(self)
@@ -382,7 +386,7 @@ class ProjectCard(QFrame):
 
         # Project name
         name_label = QLabel(f"📖 {project['name']}")
-        name_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #2c3e50; background: transparent;")
+        name_label.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {t['text']}; background: transparent;")
         layout.addWidget(name_label)
 
         # Stats row
@@ -394,18 +398,39 @@ class ProjectCard(QFrame):
         entry_count = project.get("entry_count", 0)
 
         written_label = QLabel(f"✍️ {total_written:,} written")
-        written_label.setStyleSheet("color: #27AE60; font-size: 12px; font-weight: bold; background: transparent;")
+        written_label.setStyleSheet(f"color: #27AE60; font-size: 12px; font-weight: bold; background: transparent;")
         stats_row.addWidget(written_label)
 
         total_label = QLabel(f"📊 {total:,} total")
-        total_label.setStyleSheet("color: #8E44AD; font-size: 12px; background: transparent;")
+        total_label.setStyleSheet(f"color: #8E44AD; font-size: 12px; background: transparent;")
         stats_row.addWidget(total_label)
 
         entries_label = QLabel(f"📝 {entry_count} entries")
-        entries_label.setStyleSheet("color: #999; font-size: 11px; background: transparent;")
+        entries_label.setStyleSheet(f"color: {t['text_muted']}; font-size: 11px; background: transparent;")
         stats_row.addWidget(entries_label)
         stats_row.addStretch()
         layout.addLayout(stats_row)
+
+        # Progress bar showing today's progress toward a daily goal (default 500)
+        from PyQt5.QtWidgets import QProgressBar
+        progress_bar = QProgressBar()
+        progress_bar.setRange(0, 500)
+        progress_bar.setTextVisible(False)
+        progress_bar.setFixedHeight(6)
+        today_words = project.get("today_words", 0)
+        progress_bar.setValue(min(today_words, 500))
+        progress_bar.setStyleSheet(f"""
+            QProgressBar {{
+                background-color: {t['bg_alt']};
+                border: none;
+                border-radius: 3px;
+            }}
+            QProgressBar::chunk {{
+                background-color: {t['accent']};
+                border-radius: 3px;
+            }}
+        """)
+        layout.addWidget(progress_bar)
 
         # Last activity
         last_entry = project.get("last_entry")
@@ -415,7 +440,7 @@ class ProjectCard(QFrame):
             activity_label = QLabel(f"Last: {time_str}")
         else:
             activity_label = QLabel("No entries yet")
-        activity_label.setStyleSheet("color: #aaa; font-size: 10px; background: transparent;")
+        activity_label.setStyleSheet(f"color: {t['text_faint']}; font-size: 10px; background: transparent;")
         layout.addWidget(activity_label)
 
     def mousePressEvent(self, event):
@@ -426,12 +451,15 @@ class ProjectCard(QFrame):
 class HomePage(QWidget):
     """Home page showing all projects."""
 
-    def __init__(self, db: Database, on_open_project=None, on_new_project=None):
+    def __init__(self, db: Database, on_open_project=None, on_new_project=None, dark: bool = False, on_toggle_theme=None):
         super().__init__()
         self.db = db
         self.on_open_project = on_open_project
         self.on_new_project = on_new_project
-        self.setStyleSheet("background-color: #ffffff;")
+        self.dark = dark
+        self.on_toggle_theme = on_toggle_theme
+        t = get_theme(dark)
+        self.setStyleSheet(f"background-color: {t['bg']};")
 
         self._build_ui()
 
@@ -442,11 +470,11 @@ class HomePage(QWidget):
 
         # Title
         title = QLabel("✍️ Word Counter")
-        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50; background: transparent;")
+        title.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {t['text']}; background: transparent;")
         layout.addWidget(title)
 
         subtitle = QLabel("Your writing projects")
-        subtitle.setStyleSheet("color: #999; font-size: 13px; background: transparent;")
+        subtitle.setStyleSheet(f"color: {t['text_muted']}; font-size: 13px; background: transparent;")
         layout.addWidget(subtitle)
 
         # New project button
@@ -549,21 +577,36 @@ class HomePage(QWidget):
         """)
         layout.addWidget(scroll, stretch=1)
 
-        # Bottom bar: help button + version label
+        # Bottom bar: theme toggle + help button + version label
         bottom_bar = QHBoxLayout()
         bottom_bar.setContentsMargins(0, 0, 0, 0)
 
-        help_btn = QPushButton("❓ Help")
-        help_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #ffffff;
-                color: #666;
-                border: 1px solid #ddd;
+        theme_btn = QPushButton("🌙 Dark" if not self.dark else "☀️ Light")
+        theme_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {t['btn_outline_bg']};
+                color: {t['text_secondary']};
+                border: 1px solid {t['border_light']};
                 border-radius: 6px;
                 padding: 4px 12px;
                 font-size: 11px;
-            }
-            QPushButton:hover { background-color: #f0f0f0; }
+            }}
+            QPushButton:hover {{ background-color: {t['btn_bg_hover']}; }}
+        """)
+        theme_btn.clicked.connect(lambda: self.on_toggle_theme() if self.on_toggle_theme else None)
+        bottom_bar.addWidget(theme_btn)
+
+        help_btn = QPushButton("❓ Help")
+        help_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {t['btn_outline_bg']};
+                color: {t['text_secondary']};
+                border: 1px solid {t['border_light']};
+                border-radius: 6px;
+                padding: 4px 12px;
+                font-size: 11px;
+            }}
+            QPushButton:hover {{ background-color: {t['btn_bg_hover']}; }}
         """)
         help_btn.clicked.connect(self._on_show_help)
         bottom_bar.addWidget(help_btn)
@@ -571,7 +614,7 @@ class HomePage(QWidget):
         bottom_bar.addStretch()
 
         version_label = QLabel(f"v{get_current_version()}")
-        version_label.setStyleSheet("color: #ccc; font-size: 10px; background: transparent;")
+        version_label.setStyleSheet(f"color: {t['text_disabled']}; font-size: 10px; background: transparent;")
         version_label.setAlignment(Qt.AlignRight)
         bottom_bar.addWidget(version_label)
         layout.addLayout(bottom_bar)
@@ -598,7 +641,7 @@ class HomePage(QWidget):
             return
 
         for project in projects:
-            card = ProjectCard(project, on_click=self._open_project)
+            card = ProjectCard(project, on_click=self._open_project, dark=self.dark)
             self.projects_layout.insertWidget(self.projects_layout.count() - 1, card)
 
     def _open_project(self, project: dict):
@@ -714,11 +757,95 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Word Counter ✍️")
         self.setMinimumSize(700, 750)
         self.setWindowIcon(create_app_icon())
-        self.setStyleSheet("QMainWindow { background-color: #ffffff; }")
+
+        # Load dark mode setting
+        settings = load_settings()
+        self.dark = settings.get("dark_mode", False)
+        self._apply_theme()
 
         self._build_ui()
+        self._setup_shortcuts()
+        self._setup_tray()
+
         QTimer.singleShot(2000, self._check_post_update_changelog)
         QTimer.singleShot(3000, self._check_for_updates)
+
+    def _apply_theme(self):
+        self.setStyleSheet(get_stylesheet(self.dark))
+
+    def _toggle_theme(self):
+        self.dark = not self.dark
+        settings = load_settings()
+        settings["dark_mode"] = self.dark
+        save_settings(settings)
+        self._apply_theme()
+        # Rebuild home page with new theme
+        self.home_page = HomePage(
+            self.db,
+            on_open_project=self._open_project,
+            on_new_project=self._on_new_project,
+            dark=self.dark,
+            on_toggle_theme=self._toggle_theme,
+        )
+        self.stack.removeWidget(self.stack.widget(self.PAGE_HOME))
+        self.stack.insertWidget(self.PAGE_HOME, self.home_page)
+        self.home_page.refresh_projects()
+        if self.stack.currentIndex() == self.PAGE_HOME:
+            self.stack.setCurrentIndex(self.PAGE_HOME)
+
+    def _setup_shortcuts(self):
+        from PyQt5.QtGui import QKeySequence
+        from PyQt5.QtWidgets import QShortcut
+        # Ctrl+N: New project
+        QShortcut(QKeySequence("Ctrl+N"), self, activated=self._on_new_project)
+        # Ctrl+H: Go home
+        QShortcut(QKeySequence("Ctrl+H"), self, activated=self._go_home)
+        # Ctrl+D: Toggle dark mode
+        QShortcut(QKeySequence("Ctrl+D"), self, activated=self._toggle_theme)
+        # Ctrl+Q: Quit
+        QShortcut(QKeySequence("Ctrl+Q"), self, activated=self.close)
+        # Escape: Go back (from project/stats/history to home or project)
+        QShortcut(QKeySequence("Escape"), self, activated=self._on_escape)
+
+    def _on_escape(self):
+        idx = self.stack.currentIndex()
+        if idx == self.PAGE_HOME:
+            return
+        elif idx in (self.PAGE_STATS, self.PAGE_HISTORY):
+            self._switch_to_page(self.PAGE_PROJECT)
+        else:
+            self._go_home()
+
+    def _setup_tray(self):
+        from PyQt5.QtWidgets import QSystemTrayIcon, QMenu
+        self.tray = QSystemTrayIcon(create_app_icon(), self)
+        self.tray.setToolTip("Word Counter ✍️")
+        menu = QMenu()
+        show_action = menu.addAction("Show Window")
+        show_action.triggered.connect(self._show_from_tray)
+        menu.addSeparator()
+        quit_action = menu.addAction("Quit")
+        quit_action.triggered.connect(self.close)
+        self.tray.setContextMenu(menu)
+        self.tray.activated.connect(self._on_tray_activated)
+        self.tray.show()
+
+    def _show_from_tray(self):
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def _on_tray_activated(self, reason):
+        if reason == QSystemTrayIcon.DoubleClick:
+            self._show_from_tray()
+
+    def closeEvent(self, event):
+        if hasattr(self, 'tray') and self.tray.isVisible():
+            self.hide()
+            self.tray.showMessage("Word Counter", "App minimized to tray. Double-click to restore.", QSystemTrayIcon.Information, 2000)
+            event.ignore()
+        else:
+            event.accept()
 
     def _build_ui(self):
         self.stack = QStackedWidget()
@@ -729,6 +856,8 @@ class MainWindow(QMainWindow):
             self.db,
             on_open_project=self._open_project,
             on_new_project=self._on_new_project,
+            dark=self.dark,
+            on_toggle_theme=self._toggle_theme,
         )
         self.stack.addWidget(self.home_page)  # index 0
 
@@ -768,6 +897,7 @@ class MainWindow(QMainWindow):
             on_stats=self._go_stats,
             on_history=self._go_history,
             on_project_deleted=self._on_project_deleted,
+            dark=self.dark,
         )
         self.stack.insertWidget(self.PAGE_PROJECT, self.project_page)
         self.stack.removeWidget(self.stack.widget(self.PAGE_PROJECT + 1))
@@ -788,6 +918,7 @@ class MainWindow(QMainWindow):
             self.db,
             self.current_project_id,
             on_back=lambda: self._switch_to_page(self.PAGE_PROJECT),
+            dark=self.dark,
         )
         self.stack.insertWidget(self.PAGE_STATS, self.stats_page)
         self.stack.removeWidget(self.stack.widget(self.PAGE_STATS + 1))

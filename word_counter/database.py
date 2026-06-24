@@ -150,7 +150,8 @@ class Database:
                     SELECT p.id, p.name, p.created_at, p.baseline_word_count,
                            (SELECT MAX(timestamp) FROM entries WHERE project_id = p.id) as last_entry,
                            (SELECT COALESCE(SUM(word_count), 0) FROM entries WHERE project_id = p.id) as total_written,
-                           (SELECT COUNT(*) FROM entries WHERE project_id = p.id) as entry_count
+                           (SELECT COUNT(*) FROM entries WHERE project_id = p.id) as entry_count,
+                           (SELECT COALESCE(SUM(word_count), 0) FROM entries WHERE project_id = p.id AND date(timestamp) = date('now')) as today_words
                     FROM projects p
                     ORDER BY last_entry DESC, p.created_at DESC
                 """).fetchall()

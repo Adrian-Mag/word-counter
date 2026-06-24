@@ -6,7 +6,8 @@ Designed as a page inside a QStackedWidget, not a separate window.
 
 from datetime import datetime
 
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
+from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QDialog,
     QFrame,
@@ -20,7 +21,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from .database import Database
+from .database import Database, load_settings
+from .theme import get_theme, get_card_colors
 from .update_checker import get_current_version
 
 
@@ -119,18 +121,13 @@ class EditProjectDialog(QDialog):
 class SummaryCard(QFrame):
     """A card showing a summary statistic."""
 
-    # Map of base colors to (pastel background, punchy text color)
-    COLOR_SCHEMES = {
-        "#5B9BD5": ("#E3F0FB", "#1A6FAA"),  # blue
-        "#E8743B": ("#FDEDE4", "#C25420"),  # orange
-        "#27AE60": ("#E2F5EA", "#1A8C46"),  # green
-        "#8E44AD": ("#F0E4F5", "#7D2BA0"),  # purple
-    }
-
-    def __init__(self, title: str, value: str, color: str = "#5B9BD5"):
+    def __init__(self, title: str, value: str, color: str = "#5B9BD5", dark: bool = False):
         super().__init__()
         self.setFrameShape(QFrame.StyledPanel)
-        bg, text_color = self.COLOR_SCHEMES.get(color, (f"{color}20", color))
+        self.color = color
+        self.dark = dark
+        bg, text_color = get_card_colors(color, dark)
+        t = get_theme(dark)
         self.setStyleSheet(f"""
             SummaryCard {{
                 background-color: {bg};
@@ -145,19 +142,36 @@ class SummaryCard(QFrame):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(6)
 
-        title_label = QLabel(title)
-        title_label.setStyleSheet(f"color: {text_color}; font-size: 11px; font-weight: bold; background: transparent;")
-        layout.addWidget(title_label)
+        self.title_label = QLabel(title)
+        self.title_label.setStyleSheet(f"color: {text_color}; font-size: 11px; font-weight: bold; background: transparent;")
+        layout.addWidget(self.title_label)
 
-        value_label = QLabel(value)
-        value_label.setStyleSheet(f"color: #1a1a1a; font-size: 22px; font-weight: bold; background: transparent;")
-        layout.addWidget(value_label)
+        self.value_label = QLabel(value)
+        self.value_label.setStyleSheet(f"color: {t['text_primary']}; font-size: 22px; font-weight: bold; background: transparent;")
+        layout.addWidget(self.value_label)
+
+    def update_theme(self, dark: bool):
+        self.dark = dark
+        bg, text_color = get_card_colors(self.color, dark)
+        t = get_theme(dark)
+        self.setStyleSheet(f"""
+            SummaryCard {{
+                background-color: {bg};
+                border: 1px solid {self.color}40;
+                border-radius: 10px;
+            }}
+            QLabel {{
+                background: transparent;
+            }}
+        """)
+        self.title_label.setStyleSheet(f"color: {text_color}; font-size: 11px; font-weight: bold; background: transparent;")
+        self.value_label.setStyleSheet(f"color: {t['text_primary']}; font-size: 22px; font-weight: bold; background: transparent;")
 
 
 class ProjectPage(QWidget):
     """Page for a single project — word entry, summary, navigation to stats/history."""
 
-    def __init__(self, db: Database, project_id: int, on_back=None, on_stats=None, on_history=None, on_project_deleted=None):
+    def __init__(self, db: Database, project_id: int, on_back=None, on_stats=None, on_history=None, on_project_deleted=None, dark: bool = False):
         super().__init__()
         self.db = db
         self.project_id = project_id
@@ -165,10 +179,12 @@ class ProjectPage(QWidget):
         self.on_stats = on_stats
         self.on_history = on_history
         self.on_project_deleted = on_project_deleted
+        self.dark = dark
 
         project = db.get_project(project_id)
         self.project_name = project["name"] if project else "Project"
-        self.setStyleSheet("background-color: #ffffff;")
+        t = get_theme(dark)
+        self.setStyleSheet(f"background-color: {t['bg']};")
 
         self._build_ui()
 
@@ -314,10 +330,10 @@ class ProjectPage(QWidget):
         cards_layout = QGridLayout()
         cards_layout.setSpacing(10)
 
-        self.today_card = SummaryCard("TODAY'S WORDS", "0", "#5B9BD5")
-        self.streak_card = SummaryCard("CURRENT STREAK", "0 days", "#E8743B")
-        self.written_card = SummaryCard("WORDS WRITTEN", "0", "#27AE60")
-        self.total_card = SummaryCard("TOTAL (INCL. BASELINE)", "0", "#8E44AD")
+        self.today_card = SummaryCard("TODAY'S WORDS", "0", "#5B9BD5", dark)
+        self.streak_card = SummaryCard("CURRENT STREAK", "0 days", "#E8743B", dark)
+        self.written_card = SummaryCard("WORDS WRITTEN", "0", "#27AE60", dark)
+        self.total_card = SummaryCard("TOTAL (INCL. BASELINE)", "0", "#8E44AD", dark)
 
         cards_layout.addWidget(self.today_card, 0, 0)
         cards_layout.addWidget(self.streak_card, 0, 1)
@@ -429,10 +445,23 @@ class ProjectPage(QWidget):
         stats = self.db.get_stats(self.project_id, 7)
         streak = stats["current_streak"]
 
-        self.today_card.layout().itemAt(1).widget().setText(f"{today_total:,}")
-        self.streak_card.layout().itemAt(1).widget().setText(f"{streak} days")
-        self.written_card.layout().itemAt(1).widget().setText(f"{total_written:,}")
-        self.total_card.layout().itemAt(1).widget().setText(f"{total_with_baseline:,}")
+        # Check if streak increased for animation
+        old_streak_text = self.streak_card.value_label.text()
+        new_streak_text = f"{streak} days"
+        self.today_card.value_label.setText(f"{today_total:,}")
+        self.streak_card.value_label.setText(new_streak_text)
+        self.written_card.value_label.setText(f"{total_written:,}")
+        self.total_card.value_label.setText(f"{total_with_baseline:,}")
+
+        # Animate streak card if streak increased
+        if old_streak_text != new_streak_text and old_streak_text != "0 days":
+            try:
+                old_val = int(old_streak_text.split()[0])
+                new_val = int(new_streak_text.split()[0])
+                if new_val > old_val:
+                    self._animate_streak()
+            except (ValueError, IndexError):
+                pass
 
         if all_entries:
             last = all_entries[-1]
@@ -455,6 +484,25 @@ class ProjectPage(QWidget):
             self.recent_label.setText("Recent: " + "  |  ".join(parts))
         else:
             self.recent_label.setText("")
+
+    def _animate_streak(self):
+        """Pulse the streak card when streak increases."""
+        from PyQt5.QtWidgets import QGraphicsDropShadowEffect
+        effect = QGraphicsDropShadowEffect(self.streak_card)
+        effect.setBlurRadius(0)
+        effect.setColor(QColor("#E8743B"))
+        effect.setOffset(0, 0)
+        self.streak_card.setGraphicsEffect(effect)
+
+        # Animate blur radius: 0 -> 30 -> 0
+        self._streak_anim = QPropertyAnimation(effect, b"blurRadius")
+        self._streak_anim.setDuration(800)
+        self._streak_anim.setStartValue(0)
+        self._streak_anim.setKeyValueAt(0.5, 30)
+        self._streak_anim.setEndValue(0)
+        self._streak_anim.setEasingCurve(QEasingCurve.OutInQuad)
+        self._streak_anim.start()
+        QTimer.singleShot(900, lambda: self.streak_card.setGraphicsEffect(None))
 
     def _go_back(self):
         if self.on_back:
