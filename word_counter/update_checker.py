@@ -13,8 +13,9 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-CURRENT_VERSION = "1.2.2"
+CURRENT_VERSION = "1.3.0"
 GITHUB_API_URL = "https://api.github.com/repos/Adrian-Mag/word-counter/releases/latest"
+GITHUB_ALL_RELEASES_URL = "https://api.github.com/repos/Adrian-Mag/word-counter/releases"
 
 
 def get_current_version() -> str:
@@ -22,7 +23,11 @@ def get_current_version() -> str:
 
 
 def check_for_update() -> dict | None:
-    """Check GitHub for a newer release. Returns release info dict or None if up to date."""
+    """Check GitHub for a newer release. Returns release info dict or None if up to date.
+
+    The returned dict includes 'changelog' — release notes for all versions
+    between the current version and the latest, concatenated in order.
+    """
     try:
         req = urllib.request.Request(GITHUB_API_URL, headers={"User-Agent": "WordCounter"})
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -39,15 +44,45 @@ def check_for_update() -> dict | None:
                     exe_size = asset.get("size", 0)
                     break
             if exe_url:
+                # Fetch changelog for all versions between current and latest
+                changelog = _fetch_changelog(CURRENT_VERSION, latest_tag)
                 return {
                     "version": latest_tag,
                     "url": exe_url,
                     "size": exe_size,
                     "notes": data.get("body", ""),
+                    "changelog": changelog,
                 }
     except Exception:
         pass
     return None
+
+
+def _fetch_changelog(current_version: str, latest_version: str) -> list[dict]:
+    """Fetch release notes for all versions between current and latest.
+
+    Returns a list of {'version': '1.2.0', 'notes': '...'} sorted oldest-first.
+    """
+    try:
+        req = urllib.request.Request(GITHUB_ALL_RELEASES_URL, headers={"User-Agent": "WordCounter"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            releases = json.loads(resp.read().decode("utf-8"))
+
+        changelog = []
+        for rel in releases:
+            tag = rel.get("tag_name", "").lstrip("v")
+            # Include versions newer than current, up to and including latest
+            if _compare_versions(tag, current_version) > 0 and _compare_versions(tag, latest_version) <= 0:
+                changelog.append({
+                    "version": tag,
+                    "notes": rel.get("body", ""),
+                })
+
+        # Sort oldest-first (so user reads in chronological order)
+        changelog.sort(key=lambda c: [int(x) for x in c["version"].split(".") if x.isdigit()])
+        return changelog
+    except Exception:
+        return []
 
 
 def _compare_versions(v1: str, v2: str) -> int:
@@ -125,12 +160,15 @@ def install_update(new_exe_path: Path):
         return
 
     new_size = new_exe_path.stat().st_size
+    current_pid = os.getpid()
 
-    # Create updater batch script with copy verification
+    # Create updater batch script with copy verification and proper process cleanup
     updater_script = f"""@echo off
 chcp 65001 >nul 2>nul
 :wait
-timeout /t 1 /nobreak >nul
+rem Wait for the app process to fully exit
+taskkill /pid {current_pid} /f 2>nul
+timeout /t 2 /nobreak >nul
 del "{current_exe}" 2>nul
 if exist "{current_exe}" goto wait
 copy /y "{new_exe_path}" "{current_exe}"
@@ -143,9 +181,10 @@ if not "%copied_size%"=="{new_size}" (
     for %%A in ("{current_exe}") do set copied_size=%%~zA
     if not "%copied_size%"=="{new_size}" goto verify
 )
-timeout /t 2 /nobreak >nul
+rem Wait for DLLs and file handles to be fully released by OS
+timeout /t 5 /nobreak >nul
 start "" "{current_exe}"
-timeout /t 1 /nobreak >nul
+timeout /t 3 /nobreak >nul
 del "%~f0"
 """
 

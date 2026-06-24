@@ -717,7 +717,8 @@ class MainWindow(QMainWindow):
         self.setStyleSheet("QMainWindow { background-color: #ffffff; }")
 
         self._build_ui()
-        QTimer.singleShot(2000, self._check_for_updates)
+        QTimer.singleShot(2000, self._check_post_update_changelog)
+        QTimer.singleShot(3000, self._check_for_updates)
 
     def _build_ui(self):
         self.stack = QStackedWidget()
@@ -819,21 +820,118 @@ class MainWindow(QMainWindow):
     def _on_project_deleted(self):
         self._go_home()
 
+    def _check_post_update_changelog(self):
+        """Check if the app was just updated and show the changelog if so."""
+        settings = load_settings()
+        last_version = settings.get("last_version", "")
+        current = get_current_version()
+
+        if last_version and last_version != current:
+            # App was updated since last run — fetch changelog from GitHub
+            try:
+                from .update_checker import _fetch_changelog
+                changelog = _fetch_changelog(last_version, current)
+                if changelog:
+                    self._show_changelog_dialog(changelog, last_version, current)
+            except Exception:
+                pass
+
+        # Save current version as last seen
+        settings["last_version"] = current
+        save_settings(settings)
+
+    def _show_changelog_dialog(self, changelog: list[dict], from_version: str, to_version: str):
+        """Show a dialog with the changelog for versions between from_version and to_version."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"✨ Updated to v{to_version}")
+        dialog.setMinimumSize(550, 400)
+        dialog.setStyleSheet("background-color: #ffffff;")
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        browser = QTextBrowser()
+        browser.setStyleSheet("""
+            QTextBrowser {
+                border: none;
+                padding: 24px;
+                font-size: 13px;
+                color: #2c3e50;
+                background-color: #ffffff;
+            }
+        """)
+
+        html_parts = [
+            f"<h1 style='color: #2c3e50;'>✨ What's New</h1>",
+            f"<p style='color: #888;'>Updated from v{from_version} to v{to_version}</p>",
+        ]
+        for entry in changelog:
+            ver = entry["version"]
+            notes = entry["notes"] or "No release notes available."
+            html_parts.append(f"<h2 style='color: #5B9BD5; border-bottom: 1px solid #eee; padding-bottom: 4px;'>v{ver}</h2>")
+            html_parts.append(f"<div>{notes}</div>")
+        html_parts.append(
+            "<hr style='border: none; border-top: 1px solid #eee; margin: 20px 0;'>"
+            "<p style='color: #aaa; font-size: 11px;'>Thanks for keeping Word Counter up to date! ✍️</p>"
+        )
+        browser.setHtml("\n".join(html_parts))
+        layout.addWidget(browser)
+
+        close_bar = QHBoxLayout()
+        close_bar.setContentsMargins(16, 12, 16, 12)
+        close_bar.addStretch()
+        close_btn = QPushButton("Got it!")
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #5B9BD5;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 24px;
+                font-size: 13px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #4A8AC5; }
+        """)
+        close_btn.clicked.connect(dialog.accept)
+        close_bar.addWidget(close_btn)
+        layout.addLayout(close_bar)
+
+        dialog.exec_()
+
     def _check_for_updates(self):
-        """Check GitHub for a newer release (runs silently 2s after startup)."""
+        """Check GitHub for a newer release (runs silently 3s after startup)."""
         update_info = check_for_update()
         if update_info is None:
             return
 
         current = get_current_version()
         latest = update_info["version"]
+        changelog = update_info.get("changelog", [])
+        # Build changelog text for the update dialog
+        changelog_text = ""
+        if changelog:
+            changelog_text = "\n\n📝 What's changed:\n"
+            for entry in changelog:
+                changelog_text += f"\nv{entry['version']}\n"
+                notes = entry.get("notes", "")
+                if notes:
+                    # Truncate long notes for the dialog
+                    lines = notes.strip().split("\n")
+                    for line in lines[:10]:
+                        changelog_text += f"  {line}\n"
+                    if len(lines) > 10:
+                        changelog_text += f"  ... and {len(lines) - 10} more lines\n"
+
         reply = QMessageBox.question(
             self,
             "Update Available!",
             f"A new version is available!\n\n"
             f"Current version: v{current}\n"
             f"New version: v{latest}\n\n"
-            f"Your data will be preserved.\n\n"
+            f"Your data will be preserved."
+            f"{changelog_text}\n\n"
             f"Would you like to update now?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.Yes,
@@ -866,6 +964,10 @@ class MainWindow(QMainWindow):
                 "The app will now restart to complete the update.\n"
                 "Your data is safe!",
             )
+            # Save the version we're updating to, so on next launch we show changelog
+            settings = load_settings()
+            settings["last_version"] = latest
+            save_settings(settings)
             install_update(new_exe)
         except Exception as e:
             progress.close()
