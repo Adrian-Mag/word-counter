@@ -13,7 +13,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-CURRENT_VERSION = "1.3.1"
+CURRENT_VERSION = "1.3.2"
 GITHUB_API_URL = "https://api.github.com/repos/Adrian-Mag/word-counter/releases/latest"
 GITHUB_ALL_RELEASES_URL = "https://api.github.com/repos/Adrian-Mag/word-counter/releases"
 

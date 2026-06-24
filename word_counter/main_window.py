@@ -712,7 +712,7 @@ class MainWindow(QMainWindow):
         self.db = db
         self.current_project_id: int | None = None
         self.setWindowTitle("Word Counter ✍️")
-        self.setMinimumSize(700, 650)
+        self.setMinimumSize(700, 750)
         self.setWindowIcon(create_app_icon())
         self.setStyleSheet("QMainWindow { background-color: #ffffff; }")
 

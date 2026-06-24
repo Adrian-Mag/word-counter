@@ -119,13 +119,22 @@ class EditProjectDialog(QDialog):
 class SummaryCard(QFrame):
     """A card showing a summary statistic."""
 
+    # Map of base colors to (pastel background, punchy text color)
+    COLOR_SCHEMES = {
+        "#5B9BD5": ("#E3F0FB", "#1A6FAA"),  # blue
+        "#E8743B": ("#FDEDE4", "#C25420"),  # orange
+        "#27AE60": ("#E2F5EA", "#1A8C46"),  # green
+        "#8E44AD": ("#F0E4F5", "#7D2BA0"),  # purple
+    }
+
     def __init__(self, title: str, value: str, color: str = "#5B9BD5"):
         super().__init__()
         self.setFrameShape(QFrame.StyledPanel)
+        bg, text_color = self.COLOR_SCHEMES.get(color, (f"{color}20", color))
         self.setStyleSheet(f"""
             SummaryCard {{
-                background-color: {color}15;
-                border: 1px solid {color}30;
+                background-color: {bg};
+                border: 1px solid {color}40;
                 border-radius: 10px;
             }}
             QLabel {{
@@ -137,11 +146,11 @@ class SummaryCard(QFrame):
         layout.setSpacing(6)
 
         title_label = QLabel(title)
-        title_label.setStyleSheet(f"color: {color}; font-size: 11px; font-weight: bold; background: transparent;")
+        title_label.setStyleSheet(f"color: {text_color}; font-size: 11px; font-weight: bold; background: transparent;")
         layout.addWidget(title_label)
 
         value_label = QLabel(value)
-        value_label.setStyleSheet(f"color: #2c3e50; font-size: 22px; font-weight: bold; background: transparent;")
+        value_label.setStyleSheet(f"color: #1a1a1a; font-size: 22px; font-weight: bold; background: transparent;")
         layout.addWidget(value_label)
 
 
