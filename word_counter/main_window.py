@@ -464,6 +464,7 @@ class HomePage(QWidget):
         self._build_ui()
 
     def _build_ui(self):
+        t = get_theme(self.dark)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)

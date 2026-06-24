@@ -330,10 +330,10 @@ class ProjectPage(QWidget):
         cards_layout = QGridLayout()
         cards_layout.setSpacing(10)
 
-        self.today_card = SummaryCard("TODAY'S WORDS", "0", "#5B9BD5", dark)
-        self.streak_card = SummaryCard("CURRENT STREAK", "0 days", "#E8743B", dark)
-        self.written_card = SummaryCard("WORDS WRITTEN", "0", "#27AE60", dark)
-        self.total_card = SummaryCard("TOTAL (INCL. BASELINE)", "0", "#8E44AD", dark)
+        self.today_card = SummaryCard("TODAY'S WORDS", "0", "#5B9BD5", self.dark)
+        self.streak_card = SummaryCard("CURRENT STREAK", "0 days", "#E8743B", self.dark)
+        self.written_card = SummaryCard("WORDS WRITTEN", "0", "#27AE60", self.dark)
+        self.total_card = SummaryCard("TOTAL (INCL. BASELINE)", "0", "#8E44AD", self.dark)
 
         cards_layout.addWidget(self.today_card, 0, 0)
         cards_layout.addWidget(self.streak_card, 0, 1)
