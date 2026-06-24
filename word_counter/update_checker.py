@@ -13,7 +13,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-CURRENT_VERSION = "1.4.6"
+CURRENT_VERSION = "1.5.0"
 GITHUB_API_URL = "https://api.github.com/repos/Adrian-Mag/word-counter/releases/latest"
 GITHUB_ALL_RELEASES_URL = "https://api.github.com/repos/Adrian-Mag/word-counter/releases"
 
@@ -142,14 +142,15 @@ def download_update(exe_url: str, expected_size: int = 0, progress_callback=None
 
 
 def install_update(new_exe_path: Path):
-    """Replace the current .exe with the downloaded one and relaunch.
+    """Replace the current .exe with the downloaded one.
 
-    Creates a batch script that:
+    Creates a simple batch script that:
     1. Waits for the current app to close
     2. Copies the new .exe over the old one
-    3. Verifies the copy succeeded (file size matches)
-    4. Relaunches the app
-    5. Deletes itself
+    3. Cleans up temp files and itself
+
+    The app closes normally after launching the batch script.
+    The user reopens WordCounter manually after the update.
     """
     current_exe = Path(sys.executable).resolve()
 
@@ -160,7 +161,6 @@ def install_update(new_exe_path: Path):
         return
 
     new_size = new_exe_path.stat().st_size
-    current_pid = os.getpid()
 
     # Determine log file path (app data dir)
     if platform.system() == "Windows":
@@ -169,7 +169,7 @@ def install_update(new_exe_path: Path):
         app_data = os.path.join(os.path.expanduser("~"), ".local", "share", "WordCounter")
     log_path = os.path.join(app_data, "update.log")
 
-    # Create updater batch script with full logging and launch retry
+    # Create simple updater batch script — no relaunch
     updater_script = f"""@echo off
 chcp 65001 >nul 2>nul
 set "LOG={log_path}"
@@ -179,98 +179,23 @@ set "EXPECTED_SIZE={new_size}"
 
 echo. >> "%LOG%"
 echo ============================================ >> "%LOG%"
-echo [%date% %time%] Update batch script started >> "%LOG%"
-echo   Old exe: %EXE% >> "%LOG%"
-echo   New exe: %NEW_EXE% >> "%LOG%"
-echo   Expected size: %EXPECTED_SIZE% bytes >> "%LOG%"
-echo   Log file: %LOG% >> "%LOG%"
+echo [%date% %time%] Update started >> "%LOG%"
 echo ============================================ >> "%LOG%"
 
 :wait
-echo [%date% %time%] Step 1: Waiting for app to exit naturally (sys.exit was called) >> "%LOG%"
-timeout /t 3 /nobreak >nul
-echo [%date% %time%] Step 2: Attempting to delete old exe >> "%LOG%"
+timeout /t 2 /nobreak >nul
 del "%EXE%" 2>nul
-if exist "%EXE%" (
-    echo [%date% %time%] Old exe still locked, waiting for PyInstaller cleanup >> "%LOG%"
-    timeout /t 2 /nobreak >nul
-    del "%EXE%" 2>nul
-)
-if exist "%EXE%" (
-    echo [%date% %time%] Old exe still locked, retrying >> "%LOG%"
-    goto wait
-)
-echo [%date% %time%] Step 2: Old exe deleted successfully >> "%LOG%"
+if exist "%EXE%" goto wait
 
-echo [%date% %time%] Step 4: Copying new exe >> "%LOG%"
 copy /y "%NEW_EXE%" "%EXE%" >> "%LOG%" 2>&1
-if not exist "%EXE%" (
-    echo [%date% %time%] ERROR: Copy failed, exe does not exist >> "%LOG%"
-    goto wait
-)
-echo [%date% %time%] Step 4: Copy completed >> "%LOG%"
-
-:verify
 for %%A in ("%EXE%") do set copied_size=%%~zA
-echo [%date% %time%] Step 5: Verifying size (got: %copied_size%, expected: %EXPECTED_SIZE%) >> "%LOG%"
 if not "%copied_size%"=="%EXPECTED_SIZE%" (
-    echo [%date% %time%] WARNING: Size mismatch, retrying copy >> "%LOG%"
     timeout /t 1 /nobreak >nul
     copy /y "%NEW_EXE%" "%EXE%" >> "%LOG%" 2>&1
-    for %%A in ("%EXE%") do set copied_size=%%~zA
-    if not "%copied_size%"=="%EXPECTED_SIZE%" goto verify
-)
-echo [%date% %time%] Step 5: Size verification passed >> "%LOG%"
-
-echo [%date% %time%] Step 6: Waiting 5s for DLLs/handles to release >> "%LOG%"
-timeout /t 5 /nobreak >nul
-echo [%date% %time%] Step 6: Wait complete >> "%LOG%"
-
-echo [%date% %time%] Step 6b: Cleaning up stale PyInstaller _MEI temp folders >> "%LOG%"
-for /d %%D in ("%TEMP%\\_MEI*") do (
-    echo [%date% %time%]   Removing stale: %%D >> "%LOG%"
-    rmdir /s /q "%%D" 2>nul
-)
-echo [%date% %time%] Step 6b: _MEI cleanup done >> "%LOG%"
-
-echo [%date% %time%] Step 7: Launching new exe (attempt 1) >> "%LOG%"
-start "" "%EXE%"
-timeout /t 5 /nobreak >nul
-
-rem Check if the app started by looking for the lock file
-if exist "{app_data}\\wordcounter.lock" (
-    echo [%date% %time%] Step 7: App started successfully (lock file found) >> "%LOG%"
-    goto cleanup
 )
 
-echo [%date% %time%] Step 7: App may not have started, waiting 5s and retrying (attempt 2) >> "%LOG%"
-timeout /t 5 /nobreak >nul
-start "" "%EXE%"
-timeout /t 5 /nobreak >nul
-
-if exist "{app_data}\\wordcounter.lock" (
-    echo [%date% %time%] Step 7: App started successfully on attempt 2 >> "%LOG%"
-    goto cleanup
-)
-
-echo [%date% %time%] Step 7: App may not have started, waiting 10s and retrying (attempt 3) >> "%LOG%"
-timeout /t 10 /nobreak >nul
-echo [%date% %time%] Step 7: Final launch attempt >> "%LOG%"
-start "" "%EXE%"
-timeout /t 5 /nobreak >nul
-
-if exist "{app_data}\\wordcounter.lock" (
-    echo [%date% %time%] Step 7: App started successfully on attempt 3 >> "%LOG%"
-) else (
-    echo [%date% %time%] Step 7: WARNING - App may not have started after 3 attempts >> "%LOG%"
-    echo [%date% %time%]   Please launch WordCounter manually from: %EXE% >> "%LOG%"
-)
-
-:cleanup
-echo [%date% %time%] Step 8: Cleaning up temp file >> "%LOG%"
 del "%NEW_EXE%" 2>nul
-echo [%date% %time%] Step 8: Deleting batch script >> "%LOG%"
-echo ============================================ >> "%LOG%"
+echo [%date% %time%] Update complete >> "%LOG%"
 del "%~f0"
 """
 
@@ -278,26 +203,24 @@ del "%~f0"
     with open(updater_path, "w", encoding="utf-8") as f:
         f.write(updater_script)
 
-    # Log that we're about to launch the updater
     try:
         import logging
         logger = logging.getLogger("word_counter")
-        logger.info(f"Update: launching batch updater. PID={current_pid}, exe={current_exe}, new_size={new_size}, log={log_path}")
+        logger.info(f"Update: launching batch updater. exe={current_exe}, new_size={new_size}")
     except Exception:
         pass
 
-    # Launch the updater and exit immediately
-    # Use os._exit instead of sys.exit to bypass Qt event loop and tray icon closeEvent
+    # Launch the updater batch script
     if platform.system() == "Windows":
         subprocess.Popen(
             ["cmd", "/c", str(updater_path)],
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
         )
     else:
-        # Non-Windows: just copy
         shutil.copy2(new_exe_path, current_exe)
 
-    # Clean up the lock file before exiting, since os._exit bypasses finally blocks
+    # Close the app normally — the batch script will replace the exe after we exit
+    # Use os._exit to bypass any lingering Qt event loop issues
     try:
         from .database import get_app_data_dir
         lock_file = get_app_data_dir() / "wordcounter.lock"

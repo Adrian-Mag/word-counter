@@ -120,7 +120,7 @@ def check_single_instance():
                 # Process is alive — show message and exit
                 QMessageBox.warning(None, "Already Running",
                                     "Word Counter is already running.\n"
-                                    "Please check your system tray or taskbar.")
+                                    "Please check your taskbar.")
                 return False
             else:
                 # Process is dead — steal the lock

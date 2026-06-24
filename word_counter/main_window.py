@@ -17,13 +17,11 @@ from PyQt5.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
-    QMenu,
     QMessageBox,
     QProgressDialog,
     QPushButton,
     QScrollArea,
     QStackedWidget,
-    QSystemTrayIcon,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
@@ -769,7 +767,6 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._setup_shortcuts()
-        self._setup_tray()
 
         QTimer.singleShot(2000, self._check_post_update_changelog)
         QTimer.singleShot(3000, self._check_for_updates)
@@ -814,42 +811,6 @@ class MainWindow(QMainWindow):
             self._switch_to_page(self.PAGE_PROJECT)
         else:
             self._go_home()
-
-    def _setup_tray(self):
-        self.tray = QSystemTrayIcon(create_app_icon(), self)
-        self.tray.setToolTip("Word Counter ✍️")
-        menu = QMenu()
-        show_action = menu.addAction("Show Window")
-        show_action.triggered.connect(self._show_from_tray)
-        menu.addSeparator()
-        quit_action = menu.addAction("Quit")
-        quit_action.triggered.connect(self._quit_from_tray)
-        self.tray.setContextMenu(menu)
-        self.tray.activated.connect(self._on_tray_activated)
-        self.tray.show()
-
-    def _show_from_tray(self):
-        self.show()
-        self.raise_()
-        self.activateWindow()
-
-    def _on_tray_activated(self, reason):
-        if reason == QSystemTrayIcon.DoubleClick:
-            self._show_from_tray()
-
-    def _quit_from_tray(self):
-        """Actually quit the app from the tray menu."""
-        self._force_quit = True
-        self.close()
-
-    def closeEvent(self, event):
-        if hasattr(self, 'tray') and self.tray.isVisible() and not getattr(self, '_force_quit', False):
-            self.hide()
-            self.tray.showMessage("Word Counter", "Minimized to tray. Double-click to restore or right-click → Quit to exit.", QSystemTrayIcon.Information, 3000)
-            event.ignore()
-        else:
-            self.tray.hide()
-            event.accept()
 
     def _build_ui(self):
         self.stack = QStackedWidget()
@@ -1119,7 +1080,8 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self,
                 "Update Ready",
-                "The app will now restart to complete the update.\n"
+                "The app will now close to complete the update.\n"
+                "Please reopen WordCounter from your Desktop or Downloads.\n"
                 "Your data is safe!",
             )
             # Save the version we're updating to, so on next launch we show changelog
